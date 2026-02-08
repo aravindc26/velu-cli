@@ -5,57 +5,26 @@ A modern documentation site generator. Write Markdown, configure with JSON, ship
 ## Install
 
 ```bash
-npm install -g github:YOUR_USERNAME/velu
+npm install -g @aravindc26/velu
 ```
 
 ## Quick Start
 
-1. Create a directory with your docs:
-
-```
-my-docs/
-  velu.json
-  quickstart.md
-  guides/
-    installation.md
-    editor.md
-```
-
-2. Define your navigation in `velu.json`:
-
-```json
-{
-  "$schema": "https://raw.githubusercontent.com/aravindc26/velu/main/schema/velu.schema.json",
-  "navigation": {
-    "tabs": [
-      {
-        "tab": "API Reference",
-        "pages": ["api-reference/get", "api-reference/post"]
-      }
-    ],
-    "groups": [
-      {
-        "group": "Getting Started",
-        "pages": ["quickstart", "guides/installation"]
-      }
-    ]
-  }
-}
-```
-
-3. Run the dev server:
-
 ```bash
-cd my-docs
+mkdir my-docs && cd my-docs
+velu init
 velu run
 ```
 
 Your site is live at `http://localhost:4321`.
 
+`velu init` scaffolds a complete example project with `velu.json`, sample pages, tabs, and groups — ready to customize.
+
 ## CLI Commands
 
 | Command              | Description                                      |
 | -------------------- | ------------------------------------------------ |
+| `velu init`          | Scaffold a new docs project with example files   |
 | `velu lint`          | Validate `velu.json` and check referenced pages  |
 | `velu run`           | Build and start the dev server (default port 4321)|
 | `velu run --port N`  | Start on a custom port                           |

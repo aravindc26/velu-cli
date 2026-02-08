@@ -1,5 +1,5 @@
 import { resolve, join, dirname } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -14,6 +14,7 @@ function printHelp() {
   velu — documentation site generator
 
   Usage:
+    velu init              Scaffold a new docs project with example files
     velu lint              Validate velu.json and check referenced pages
     velu run [--port N]    Build site and start dev server (default: 4321)
     velu build             Build site without starting the dev server
@@ -22,8 +23,71 @@ function printHelp() {
     --port <number>   Port for the dev server (default: 4321)
     --help            Show this help message
 
-  Run these commands from a directory containing velu.json.
+  Run lint/run/build from a directory containing velu.json.
 `);
+}
+
+// ── init ────────────────────────────────────────────────────────────────────────
+
+function init(targetDir: string) {
+  if (existsSync(join(targetDir, "velu.json"))) {
+    console.error("❌ velu.json already exists in this directory.");
+    process.exit(1);
+  }
+
+  // velu.json
+  const config = {
+    $schema: "https://raw.githubusercontent.com/aravindc26/velu/main/schema/velu.schema.json",
+    navigation: {
+      tabs: [
+        {
+          tab: "API Reference",
+          pages: ["api-reference/overview", "api-reference/authentication"],
+        },
+      ],
+      groups: [
+        {
+          group: "Getting Started",
+          pages: ["quickstart", "installation"],
+        },
+        {
+          group: "Guides",
+          pages: ["guides/configuration", "guides/deployment"],
+        },
+      ],
+    },
+  };
+  writeFileSync(join(targetDir, "velu.json"), JSON.stringify(config, null, 2) + "\n", "utf-8");
+
+  // Example pages
+  const pages: Record<string, string> = {
+    "quickstart.md": `# Quickstart\n\nWelcome to your new documentation site!\n\n## Prerequisites\n\n- Node.js 18+\n- npm\n\n## Getting Started\n\n1. Edit the markdown files in this directory\n2. Update \`velu.json\` to configure navigation\n3. Run \`velu run\` to start the dev server\n\n\`\`\`bash\nvelu run\n\`\`\`\n\nYour site is live at \`http://localhost:4321\`.\n`,
+    "installation.md": `# Installation\n\nInstall Velu globally:\n\n\`\`\`bash\nnpm install -g @aravindc26/velu\n\`\`\`\n\nOr run directly with npx:\n\n\`\`\`bash\nnpx @aravindc26/velu run\n\`\`\`\n`,
+    "guides/configuration.md": `# Configuration\n\nVelu uses a \`velu.json\` file to define your site's navigation.\n\n## Navigation Structure\n\n- **Tabs** — Top-level horizontal navigation\n- **Groups** — Collapsible sidebar sections\n- **Pages** — Individual markdown documents\n\n## Example\n\n\`\`\`json\n{\n  "navigation": {\n    "groups": [\n      {\n        "group": "Getting Started",\n        "pages": ["quickstart"]\n      }\n    ]\n  }\n}\n\`\`\`\n`,
+    "guides/deployment.md": `# Deployment\n\nBuild your site for production:\n\n\`\`\`bash\nvelu build\n\`\`\`\n\nThe output is a static site you can deploy anywhere — Netlify, Vercel, GitHub Pages, etc.\n`,
+    "api-reference/overview.md": `# API Overview\n\nThis section covers the API reference for your project.\n\n## Endpoints\n\n| Method | Path | Description |\n|--------|------|-------------|\n| GET | /api/health | Health check |\n| POST | /api/data | Create data |\n`,
+    "api-reference/authentication.md": `# Authentication\n\nAll API requests require an API key.\n\n## Headers\n\n\`\`\`\nAuthorization: Bearer YOUR_API_KEY\n\`\`\`\n\n## Getting an API Key\n\nVisit the dashboard to generate your API key.\n`,
+  };
+
+  for (const [filePath, content] of Object.entries(pages)) {
+    const fullPath = join(targetDir, filePath);
+    mkdirSync(dirname(fullPath), { recursive: true });
+    writeFileSync(fullPath, content, "utf-8");
+  }
+
+  console.log("");
+  console.log("  \x1b[36mvelu\x1b[0m  project initialized");
+  console.log("");
+  console.log("  Created:");
+  console.log("    velu.json");
+  for (const filePath of Object.keys(pages)) {
+    console.log(`    ${filePath}`);
+  }
+  console.log("");
+  console.log("  Next steps:");
+  console.log("    velu run        Start the dev server");
+  console.log("    velu lint       Validate your config");
+  console.log("");
 }
 
 // ── lint ─────────────────────────────────────────────────────────────────────────
@@ -99,9 +163,15 @@ if (!command || command === "--help" || command === "-h") {
 
 const docsDir = process.cwd();
 
+// init doesn't require velu.json
+if (command === "init") {
+  init(docsDir);
+  process.exit(0);
+}
+
 if (!existsSync(join(docsDir, "velu.json"))) {
   console.error("❌ No velu.json found in the current directory.");
-  console.error("   Run this command from a directory containing velu.json.");
+  console.error("   Run `velu init` to scaffold a new project, or run from a directory containing velu.json.");
   process.exit(1);
 }
 

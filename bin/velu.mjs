@@ -1,15 +1,21 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const cliPath = join(__dirname, "..", "src", "cli.ts");
+const pkgRoot = join(__dirname, "..");
+const cliPath = join(pkgRoot, "src", "cli.ts");
+
+// Resolve tsx from the package's own node_modules, not the user's CWD
+const require = createRequire(join(pkgRoot, "package.json"));
+const tsxPath = pathToFileURL(require.resolve("tsx")).href;
 
 const child = spawn(
   process.execPath,
-  ["--import", "tsx", cliPath, ...process.argv.slice(2)],
+  ["--import", tsxPath, cliPath, ...process.argv.slice(2)],
   { stdio: "inherit", cwd: process.cwd() }
 );
 
