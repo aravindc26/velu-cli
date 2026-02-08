@@ -1,0 +1,33 @@
+{
+  "name": "@aravindc26/velu",
+  "version": "0.1.0",
+  "description": "A modern documentation site generator powered by Markdown and JSON configuration",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["docs", "documentation", "markdown", "static-site", "cli"],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "bin": {
+    "velu": "./bin/velu.mjs"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "schema/"
+  ],
+  "scripts": {
+    "lint": "tsx src/cli.ts lint",
+    "build": "tsx src/cli.ts build",
+    "dev": "tsx src/cli.ts run"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "tsx": "^4.19.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  }
+}

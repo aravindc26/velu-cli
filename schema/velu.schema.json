@@ -1,0 +1,137 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://velu.dev/schema/velu.schema.json",
+  "title": "Velu Configuration",
+  "description": "Configuration schema for velu.json — the core config file for Velu documentation sites.",
+  "type": "object",
+  "required": ["navigation"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Path or URL to the JSON schema for editor validation."
+    },
+    "navigation": {
+      "type": "object",
+      "description": "Defines the site navigation hierarchy: tabs → groups → pages.",
+      "properties": {
+        "tabs": {
+          "type": "array",
+          "description": "Top-level navigation tabs.",
+          "items": {
+            "$ref": "#/definitions/tab"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "description": "Top-level navigation groups (used when there are no tabs, or as default content).",
+          "items": {
+            "$ref": "#/definitions/group"
+          }
+        },
+        "pages": {
+          "type": "array",
+          "description": "Top-level standalone pages.",
+          "items": {
+            "$ref": "#/definitions/page"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "page": {
+      "type": "string",
+      "description": "Reference to a markdown file relative to the docs directory (without .md extension). E.g. 'quickstart' → docs/quickstart.md, 'writing-content/page' → docs/writing-content/page.md."
+    },
+    "group": {
+      "type": "object",
+      "description": "A group of pages, optionally nested.",
+      "required": ["group", "pages"],
+      "properties": {
+        "group": {
+          "type": "string",
+          "description": "Display name for the group."
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier for the group."
+        },
+        "tag": {
+          "type": "string",
+          "description": "Optional badge/tag label displayed next to the group name."
+        },
+        "expanded": {
+          "type": "boolean",
+          "description": "Whether the group is expanded by default. Defaults to true.",
+          "default": true
+        },
+        "pages": {
+          "type": "array",
+          "description": "Pages or nested groups within this group.",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/definitions/page" },
+              { "$ref": "#/definitions/group" }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "tab": {
+      "type": "object",
+      "description": "A top-level navigation tab.",
+      "required": ["tab"],
+      "properties": {
+        "tab": {
+          "type": "string",
+          "description": "Display name for the tab."
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier for the tab."
+        },
+        "href": {
+          "type": "string",
+          "description": "External link URL. When set, the tab links externally instead of showing pages.",
+          "format": "uri"
+        },
+        "pages": {
+          "type": "array",
+          "description": "Standalone pages directly under this tab.",
+          "items": {
+            "$ref": "#/definitions/page"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "description": "Groups of pages under this tab.",
+          "items": {
+            "$ref": "#/definitions/group"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": ["href"],
+          "not": {
+            "anyOf": [
+              { "required": ["pages"] },
+              { "required": ["groups"] }
+            ]
+          }
+        },
+        {
+          "not": { "required": ["href"] },
+          "anyOf": [
+            { "required": ["pages"] },
+            { "required": ["groups"] }
+          ]
+        }
+      ]
+    }
+  }
+}

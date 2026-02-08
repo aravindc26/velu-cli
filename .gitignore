@@ -1,0 +1,6 @@
+node_modules/
+.velu-out/
+docs/.velu-out/
+dist/
+*.tgz
+docs
