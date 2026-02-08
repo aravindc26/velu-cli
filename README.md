@@ -25,7 +25,7 @@ my-docs/
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/YOUR_USERNAME/velu/main/schema/velu.schema.json",
+  "$schema": "https://raw.githubusercontent.com/aravindc26/velu/main/schema/velu.schema.json",
   "navigation": {
     "tabs": [
       {
