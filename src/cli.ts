@@ -17,7 +17,7 @@ function printHelp() {
     velu init              Scaffold a new docs project with example files
     velu lint              Validate velu.json and check referenced pages
     velu run [--port N]    Build site and start dev server (default: 4321)
-    velu build             Build site without starting the dev server
+    velu build             Build a deployable static site (SSG)
 
   Options:
     --port <number>   Port for the dev server (default: 4321)
@@ -109,11 +109,29 @@ async function lint(docsDir: string) {
 
 // ── build ────────────────────────────────────────────────────────────────────────
 
-async function buildSite(docsDir: string): Promise<string> {
+async function generateProject(docsDir: string): Promise<string> {
   const { build } = await import("./build.js");
   const outDir = join(docsDir, ".velu-out");
   build(docsDir, outDir);
   return outDir;
+}
+
+async function buildStatic(outDir: string) {
+  await new Promise<void>((res, rej) => {
+    const child = spawn("node", ["_server.mjs", "build"], {
+      cwd: outDir,
+      stdio: "inherit",
+    });
+    child.on("exit", (code) => (code === 0 ? res() : rej(new Error(`Build exited with ${code}`))));
+  });
+}
+
+async function buildSite(docsDir: string) {
+  const outDir = await generateProject(docsDir);
+  await installDeps(outDir);
+  await buildStatic(outDir);
+  const distDir = join(outDir, "dist");
+  console.log(`\n📁 Static site output: ${distDir}`);
 }
 
 // ── run ──────────────────────────────────────────────────────────────────────────
@@ -146,7 +164,7 @@ function spawnServer(outDir: string, command: string, port: number) {
 }
 
 async function run(docsDir: string, port: number) {
-  const outDir = await buildSite(docsDir);
+  const outDir = await generateProject(docsDir);
   await installDeps(outDir);
   spawnServer(outDir, "dev", port);
 }
