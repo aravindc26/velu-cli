@@ -10,6 +10,69 @@
       "type": "string",
       "description": "Path or URL to the JSON schema for editor validation."
     },
+    "theme": {
+      "type": "string",
+      "description": "Named theme preset that controls the overall look and feel.",
+      "enum": ["violet", "maple", "palm", "willow", "linden", "almond", "aspen"],
+      "default": "violet"
+    },
+    "colors": {
+      "type": "object",
+      "description": "Override the theme's accent colors.",
+      "properties": {
+        "primary": {
+          "type": "string",
+          "description": "Primary brand color (hex). Used as accent in both light and dark modes unless overridden.",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "light": {
+          "type": "string",
+          "description": "Accent color for light mode (hex). Overrides primary in light mode.",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "dark": {
+          "type": "string",
+          "description": "Accent color for dark mode (hex). Overrides primary in dark mode.",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "appearance": {
+      "type": "string",
+      "description": "Controls light/dark mode behavior.",
+      "enum": ["system", "light", "dark"],
+      "default": "system"
+    },
+    "styling": {
+      "type": "object",
+      "description": "Fine-grained styling options.",
+      "properties": {
+        "codeblocks": {
+          "type": "object",
+          "description": "Code block styling options.",
+          "properties": {
+            "theme": {
+              "description": "Shiki theme for syntax highlighting. Use a string for a single theme, or an object with light/dark keys.",
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "object",
+                  "properties": {
+                    "light": { "type": "string" },
+                    "dark": { "type": "string" }
+                  },
+                  "required": ["light", "dark"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "navigation": {
       "type": "object",
       "description": "Defines the site navigation hierarchy: tabs → groups → pages.",

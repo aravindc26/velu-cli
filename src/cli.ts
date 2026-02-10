@@ -38,6 +38,7 @@ function init(targetDir: string) {
   // velu.json
   const config = {
     $schema: "https://raw.githubusercontent.com/aravindc26/velu/main/schema/velu.schema.json",
+    theme: "violet" as const,
     navigation: {
       tabs: [
         {

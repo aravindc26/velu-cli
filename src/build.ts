@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync, rmSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
+import { generateThemeCss, type ThemeConfig, type VeluColors, type VeluStyling } from "./themes.js";
 
 // ── Types (used only by build.ts for page copying) ─────────────────────────────
 
@@ -17,6 +18,10 @@ interface VeluTab {
 
 interface VeluConfig {
   $schema?: string;
+  theme?: string;
+  colors?: VeluColors;
+  appearance?: "system" | "light" | "dark";
+  styling?: VeluStyling;
   navigation: {
     tabs?: VeluTab[];
     groups?: VeluGroup[];
@@ -132,6 +137,10 @@ export interface VeluTab {
 
 export interface VeluConfig {
   $schema?: string;
+  theme?: string;
+  colors?: { primary?: string; light?: string; dark?: string };
+  appearance?: 'system' | 'light' | 'dark';
+  styling?: { codeblocks?: { theme?: string | { light: string; dark: string } } };
   navigation: {
     tabs?: VeluTab[];
     groups?: VeluGroup[];
@@ -296,9 +305,31 @@ export function getTabSidebarMap(): Record<string, string[]> {
   writeFileSync(join(outDir, "src", "lib", "velu.ts"), veluLib, "utf-8");
   console.log("📚 Generated config module");
 
-  // ── 4. Generate site config ────────────────────────────────────────────────
+  // ── 4. Generate theme CSS ─────────────────────────────────────────────────
+  const themeCss = generateThemeCss({
+    theme: config.theme,
+    colors: config.colors,
+    appearance: config.appearance,
+    styling: config.styling,
+  });
+  writeFileSync(join(outDir, "src", "styles", "velu-theme.css"), themeCss, "utf-8");
+  console.log(`🎨 Generated theme: ${config.theme || "mint"}`);
+
+  // ── 5. Generate site config ────────────────────────────────────────────────
+  // Build expressiveCode config for code block themes
+  let expressiveCodeConfig = "";
+  if (config.styling?.codeblocks?.theme) {
+    const cbt = config.styling.codeblocks.theme;
+    if (typeof cbt === "string") {
+      expressiveCodeConfig = `\n      expressiveCode: { themes: ['${cbt}'] },`;
+    } else {
+      expressiveCodeConfig = `\n      expressiveCode: { themes: ['${cbt.dark}', '${cbt.light}'] },`;
+    }
+  }
+
   const astroConfig = `import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { ion } from 'starlight-ion-theme';
 import { getSidebar } from './src/lib/velu.ts';
 
 export default defineConfig({
@@ -306,11 +337,11 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Velu Docs',
+      plugins: [ion()],
       components: {
-        Header: './src/components/Header.astro',
         Sidebar: './src/components/Sidebar.astro',
       },
-      customCss: ['./src/styles/tabs.css'],
+      customCss: ['./src/styles/velu-theme.css', './src/styles/tabs.css'],${expressiveCodeConfig}
       sidebar: getSidebar(),
     }),
   ],
@@ -319,64 +350,26 @@ export default defineConfig({
   writeFileSync(join(outDir, "_config.mjs"), astroConfig, "utf-8");
   console.log("⚙️  Generated site config");
 
-  // ── 5. Generate Header.astro — reads tabs from velu.ts ────────────────────
-  const headerComponent = `---
-import Default from '@astrojs/starlight/components/Header.astro';
-import { getTabs } from '../lib/velu.ts';
+  // ── 6. Generate Sidebar.astro — tabs at top + filtered content ─────────────
+  const sidebarComponent = `---
+import MobileMenuFooter from 'virtual:starlight/components/MobileMenuFooter';
+import SidebarSublist from '@astrojs/starlight/components/SidebarSublist.astro';
+import { getTabs, getTabSidebarMap } from '../lib/velu.ts';
 
 const tabs = getTabs();
+const tabSidebarMap = getTabSidebarMap();
 const currentPath = Astro.url.pathname;
 
 function isTabActive(tab: any, path: string): boolean {
   if (tab.href) return false;
   if (tab.pathPrefix === '__default__') {
     const otherPrefixes = tabs
-      .filter((t) => t.pathPrefix && t.pathPrefix !== '__default__' && !t.href)
-      .map((t) => t.pathPrefix);
-    return !otherPrefixes.some((p) => path.startsWith('/' + p + '/'));
+      .filter((t: any) => t.pathPrefix && t.pathPrefix !== '__default__' && !t.href)
+      .map((t: any) => t.pathPrefix);
+    return !otherPrefixes.some((p: string) => path.startsWith('/' + p + '/'));
   }
   return path.startsWith('/' + tab.pathPrefix + '/');
 }
----
-
-<Default {...Astro.props}>
-  <slot />
-</Default>
-
-<nav class="velu-tabs">
-  <div class="velu-tabs-inner">
-    {tabs.map((tab) => {
-      if (tab.href) {
-        return (
-          <a href={tab.href} class="velu-tab" target="_blank" rel="noopener noreferrer">
-            {tab.label}
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg>
-          </a>
-        );
-      }
-      const active = isTabActive(tab, currentPath);
-      const href = tab.firstPage ? '/' + tab.firstPage + '/' : '/';
-      return (
-        <a href={href} class:list={['velu-tab', { active }]}>
-          {tab.label}
-        </a>
-      );
-    })}
-  </div>
-</nav>
-`;
-  writeFileSync(join(outDir, "src", "components", "Header.astro"), headerComponent, "utf-8");
-  console.log("🧩 Generated header component");
-
-  // ── 6. Generate Sidebar.astro — reads filter map from velu.ts ─────────────
-  const sidebarComponent = `---
-import MobileMenuFooter from 'virtual:starlight/components/MobileMenuFooter';
-import SidebarPersister from '@astrojs/starlight/components/SidebarPersister.astro';
-import SidebarSublist from '@astrojs/starlight/components/SidebarSublist.astro';
-import { getTabSidebarMap } from '../lib/velu.ts';
-
-const tabSidebarMap = getTabSidebarMap();
-const currentPath = Astro.url.pathname;
 
 function getActivePrefix(path: string): string {
   const prefixes = Object.keys(tabSidebarMap).filter(p => p !== '__default__');
@@ -396,9 +389,29 @@ const filteredSidebar = sidebar.filter((entry: any) => {
 });
 ---
 
-<SidebarPersister>
-  <SidebarSublist sublist={filteredSidebar} />
-</SidebarPersister>
+<div class="velu-sidebar-tabs">
+  {tabs.map((tab) => {
+    if (tab.href) {
+      return (
+        <a href={tab.href} class="velu-sidebar-tab" target="_blank" rel="noopener noreferrer">
+          {tab.icon && <span class="velu-sidebar-tab-icon" data-icon={tab.icon} />}
+          <span>{tab.label}</span>
+          <svg class="velu-external-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg>
+        </a>
+      );
+    }
+    const active = isTabActive(tab, currentPath);
+    const href = tab.firstPage ? '/' + tab.firstPage + '/' : '/';
+    return (
+      <a href={href} class:list={['velu-sidebar-tab', { active }]}>
+        {tab.icon && <span class="velu-sidebar-tab-icon" data-icon={tab.icon} />}
+        <span>{tab.label}</span>
+      </a>
+    );
+  })}
+</div>
+
+<SidebarSublist sublist={filteredSidebar} />
 
 <div class="md:sl-hidden">
   <MobileMenuFooter />
@@ -408,74 +421,61 @@ const filteredSidebar = sidebar.filter((entry: any) => {
   console.log("📋 Generated sidebar component");
 
   // ── 7. Generate tabs.css ──────────────────────────────────────────────────
-  const tabsCss = `/* ── Velu layout overrides ──────────────────────────────────────────────── */
+  const tabsCss = `/* ── Velu sidebar tabs ─────────────────────────────────────────────────── */
 
 :root {
-  --sl-nav-height: 6rem;
+  --sl-sidebar-width: 16rem;
 }
 
-/* Fixed header: flex column, no bottom padding — tab bar sits at the bottom */
-.page > header.header {
+.velu-sidebar-tabs {
   display: flex;
   flex-direction: column;
-  padding-bottom: 0;
+  gap: 0.15rem;
+  padding: 0.35rem;
+  margin-bottom: 1rem;
+  background-color: var(--sl-color-bg);
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.5rem;
 }
 
-/* Standard nav content fills the top */
-.page > header.header > .header.sl-flex {
-  height: auto;
-  flex: 1;
-}
-
-/* ── Tab bar ───────────────────────────────────────────────────────────── */
-
-.velu-tabs {
-  flex-shrink: 0;
-  /* Stretch to full header width past its padding */
-  margin-inline: calc(-1 * var(--sl-nav-pad-x));
-  padding-inline: var(--sl-nav-pad-x);
-  background: var(--sl-color-bg-nav);
-}
-
-.velu-tabs-inner {
+.velu-sidebar-tab {
   display: flex;
-  gap: 0.25rem;
-  overflow-x: auto;
-}
-
-.velu-tab {
-  display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.55rem 0.85rem;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
   font-size: var(--sl-text-sm);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--sl-color-gray-3);
   text-decoration: none;
   border-radius: 0.375rem;
   transition: color 0.15s, background-color 0.15s;
-  white-space: nowrap;
 }
 
-.velu-tab:hover {
-  color: var(--sl-color-gray-1);
+.velu-sidebar-tab:hover {
+  color: var(--sl-color-white);
   background-color: var(--sl-color-gray-6);
 }
 
-.velu-tab.active {
+.velu-sidebar-tab.active {
   color: var(--sl-color-white);
-  background-color: var(--sl-color-gray-5);
+  background-color: var(--sl-color-gray-6);
 }
 
-.velu-tab svg {
-  opacity: 0.5;
+:root[data-theme='light'] .velu-sidebar-tab.active {
+  color: var(--sl-color-white);
+  background-color: var(--sl-color-gray-7);
+}
+
+.velu-external-icon {
+  opacity: 0.4;
   flex-shrink: 0;
+  margin-inline-start: auto;
 }
 `;
   writeFileSync(join(outDir, "src", "styles", "tabs.css"), tabsCss, "utf-8");
   console.log("🎨 Generated tabs.css");
 
-  // ── 8. Static boilerplate ─────────────────────────────────────────────────
+  // ── 9. Static boilerplate ─────────────────────────────────────────────────
   const astroPkg = {
     name: "velu-docs-site",
     version: "0.0.1",
@@ -487,9 +487,10 @@ const filteredSidebar = sidebar.filter((entry: any) => {
       preview: "astro preview",
     },
     dependencies: {
-      astro: "^5.1.0",
-      "@astrojs/starlight": "^0.32.0",
+      astro: "^5.12.0",
+      "@astrojs/starlight": "^0.35.0",
       sharp: "^0.33.0",
+      "starlight-ion-theme": "^2.3.0",
     },
   };
   writeFileSync(join(outDir, "package.json"), JSON.stringify(astroPkg, null, 2) + "\n", "utf-8");
@@ -513,7 +514,7 @@ const filteredSidebar = sidebar.filter((entry: any) => {
     "utf-8"
   );
 
-  // ── 9. Generate _server.mjs — programmatic dev/build/preview ────────────────
+  // ── 10. Generate _server.mjs — programmatic dev/build/preview ───────────────
   const serverScript = `import { dev, build, preview } from 'astro';
 import { watch } from 'node:fs';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from 'node:fs';
@@ -623,7 +624,7 @@ if (command === 'dev') {
 `;
   writeFileSync(join(outDir, "_server.mjs"), serverScript, "utf-8");
 
-  // ── 10. Generate .gitignore ──────────────────────────────────────────────
+  // ── 11. Generate .gitignore ──────────────────────────────────────────────
   writeFileSync(
     join(outDir, ".gitignore"),
     `.astro/\nnode_modules/\ndist/\n`,
