@@ -726,7 +726,7 @@ const title = Astro.locals.starlightRoute.entry.data.title;
 
   function connectSSE() {
     if (state.eventSource) state.eventSource.close();
-    var url = API_BASE + '/conversations/' + state.conversationId + '/events?after_seq=' + state.lastSeq;
+    var url = API_BASE + '/conversations/' + state.conversationId + '/events?after_seq=' + state.lastSeq + '&token=' + encodeURIComponent(state.conversationToken || '');
     state.eventSource = new EventSource(url);
 
     state.eventSource.addEventListener('assistant.completed', function(e) {
