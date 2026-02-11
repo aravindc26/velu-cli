@@ -341,8 +341,9 @@ export default defineConfig({
       components: {
         Sidebar: './src/components/Sidebar.astro',
         PageTitle: './src/components/PageTitle.astro',
+        Footer: './src/components/Footer.astro',
       },
-      customCss: ['./src/styles/velu-theme.css', './src/styles/tabs.css'],${expressiveCodeConfig}
+      customCss: ['./src/styles/velu-theme.css', './src/styles/tabs.css', './src/styles/assistant.css'],${expressiveCodeConfig}
       sidebar: getSidebar(),
     }),
   ],
@@ -513,9 +514,418 @@ const title = Astro.locals.starlightRoute.entry.data.title;
     }
   })();
 </script>
+
+<!-- AI Assistant Widget -->
+<div class="velu-ask-bar" id="veluAskBar">
+  <div class="velu-ask-bar-inner">
+    <input type="text" class="velu-ask-input" id="veluAskInput" placeholder="Ask a question..." autocomplete="off" />
+    <button class="velu-ask-submit" id="veluAskSubmit" aria-label="Send">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </button>
+  </div>
+</div>
+
+<div class="velu-assistant-panel velu-panel-closed" id="veluAssistantPanel">
+  <div class="velu-assistant-header">
+    <span class="velu-assistant-title">Assistant</span>
+    <div class="velu-assistant-actions">
+      <button class="velu-assistant-action" data-velu-action="expand" title="Expand" aria-label="Expand assistant" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      </button>
+      <button class="velu-assistant-action" data-velu-action="reset" title="New chat" aria-label="New chat" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+      </button>
+      <button class="velu-assistant-action" data-velu-action="close" title="Close" aria-label="Close assistant" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="velu-assistant-messages" id="veluAssistantMessages"></div>
+  <div class="velu-assistant-input-area">
+    <input type="text" class="velu-assistant-chat-input" id="veluAssistantChatInput" placeholder="Ask a question..." autocomplete="off" />
+    <button class="velu-assistant-send" id="veluAssistantSend" aria-label="Send">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94l18-8.5a.75.75 0 000-1.38l-18-8.5z"/></svg>
+    </button>
+  </div>
+</div>
+
+<script is:inline>
+(function veluAssistant() {
+  var API_BASE = 'https://api.getvelu.com/api/v1/public/ai-assistant';
+  var state = {
+    conversationId: null,
+    conversationToken: null,
+    lastSeq: 0,
+    eventSource: null,
+    expanded: false,
+    bootstrapped: false
+  };
+
+  var askBar = document.getElementById('veluAskBar');
+  var askInput = document.getElementById('veluAskInput');
+  var askSubmit = document.getElementById('veluAskSubmit');
+  var panel = document.getElementById('veluAssistantPanel');
+  var messagesEl = document.getElementById('veluAssistantMessages');
+  var chatInput = document.getElementById('veluAssistantChatInput');
+  var sendBtn = document.getElementById('veluAssistantSend');
+  var closeBtn = document.getElementById('veluAssistantClose');
+  var expandBtn = document.getElementById('veluAssistantExpand');
+  var newChatBtn = document.getElementById('veluAssistantNewChat');
+
+  if (!askBar || !panel) return;
+
+  if (panel.parentElement !== document.body) {
+    document.body.appendChild(panel);
+  }
+  if (askBar.parentElement !== document.body) {
+    document.body.appendChild(askBar);
+  }
+
+  function saveState() {
+    try {
+      sessionStorage.setItem('velu-panel-open', isPanelOpen() ? '1' : '');
+      sessionStorage.setItem('velu-panel-expanded', state.expanded ? '1' : '');
+      sessionStorage.setItem('velu-panel-messages', messagesEl.innerHTML);
+      sessionStorage.setItem('velu-conv-id', state.conversationId || '');
+      sessionStorage.setItem('velu-conv-token', state.conversationToken || '');
+      sessionStorage.setItem('velu-last-seq', String(state.lastSeq));
+    } catch(e) {}
+  }
+
+  function openPanel() {
+    panel.classList.remove('velu-panel-closed');
+    askBar.classList.add('velu-ask-bar-hidden');
+    document.documentElement.classList.add('velu-assistant-open');
+    chatInput.focus();
+    saveState();
+  }
+
+  function closePanel() {
+    panel.classList.add('velu-panel-closed');
+    askBar.classList.remove('velu-ask-bar-hidden');
+    document.documentElement.classList.remove('velu-assistant-open');
+    document.documentElement.classList.remove('velu-assistant-wide');
+    if (state.eventSource) { state.eventSource.close(); state.eventSource = null; }
+    saveState();
+  }
+
+  function resetChat() {
+    state.conversationId = null;
+    state.conversationToken = null;
+    state.lastSeq = 0;
+    if (state.eventSource) { state.eventSource.close(); state.eventSource = null; }
+    messagesEl.innerHTML = '';
+    chatInput.value = '';
+    chatInput.focus();
+    saveState();
+  }
+
+  function toggleExpand() {
+    state.expanded = !state.expanded;
+    panel.classList.toggle('velu-assistant-expanded', state.expanded);
+    document.documentElement.classList.toggle('velu-assistant-wide', state.expanded);
+    saveState();
+  }
+
+  // Expose to inline onclick handlers
+  window._veluClosePanel = closePanel;
+  window._veluResetChat = resetChat;
+  window._veluToggleExpand = toggleExpand;
+
+  function bootstrap() {
+    if (state.bootstrapped) return Promise.resolve();
+    return fetch(API_BASE + '/bootstrap', { credentials: 'include' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { state.bootstrapped = true; })
+      .catch(function() {});
+  }
+
+  function isPanelOpen() {
+    return !panel.classList.contains('velu-panel-closed');
+  }
+
+  function addMessage(role, content, citations) {
+    var msgDiv = document.createElement('div');
+    msgDiv.className = 'velu-msg velu-msg-' + role;
+    var bubble = document.createElement('div');
+    bubble.className = 'velu-msg-bubble velu-msg-bubble-' + role;
+    bubble.innerHTML = formatContent(content, citations || []);
+    msgDiv.appendChild(bubble);
+
+    if (role === 'assistant' && citations && citations.length > 0) {
+      var citDiv = document.createElement('div');
+      citDiv.className = 'velu-msg-citations';
+      citations.forEach(function(c, i) {
+        var a = document.createElement('a');
+        a.href = c.url || c.route_path || '#';
+        a.className = 'velu-citation-link';
+        a.textContent = '[' + (i + 1) + '] ' + (c.title || c.route_path || 'Source');
+        a.target = '_blank';
+        citDiv.appendChild(a);
+      });
+      msgDiv.appendChild(citDiv);
+    }
+
+    if (role === 'assistant') {
+      var actions = document.createElement('div');
+      actions.className = 'velu-msg-actions';
+      actions.innerHTML = '<button class="velu-msg-action" title="Like"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg></button>'
+        + '<button class="velu-msg-action" title="Dislike"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg></button>'
+        + '<button class="velu-msg-action velu-msg-copy" title="Copy"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>'
+        + '<button class="velu-msg-action velu-msg-retry" title="Retry"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>';
+      msgDiv.appendChild(actions);
+
+      var copyBtn = actions.querySelector('.velu-msg-copy');
+      if (copyBtn) {
+        copyBtn.onclick = function() {
+          navigator.clipboard.writeText(content);
+          copyBtn.title = 'Copied!';
+          setTimeout(function() { copyBtn.title = 'Copy'; }, 1500);
+        };
+      }
+    }
+
+    messagesEl.appendChild(msgDiv);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    saveState();
+    return bubble;
+  }
+
+  function formatContent(text, citations) {
+    var html = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\\n/g, '<br>')
+      .replace(/\`([^\`]+)\`/g, '<code>$1</code>')
+      .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+    html = html.replace(/\\[(\\d+)\\]/g, function(m, n) {
+      var idx = parseInt(n) - 1;
+      var c = citations[idx];
+      if (c) {
+        return '<a href="' + (c.url || c.route_path || '#') + '" class="velu-citation-ref" target="_blank">[' + n + ']</a>';
+      }
+      return m;
+    });
+    return html;
+  }
+
+  function addThinking() {
+    var div = document.createElement('div');
+    div.className = 'velu-msg velu-msg-assistant';
+    div.id = 'veluThinking';
+    div.innerHTML = '<div class="velu-msg-bubble velu-msg-bubble-assistant"><span class="velu-thinking-dots"><span></span><span></span><span></span></span></div>';
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function removeThinking() {
+    var el = document.getElementById('veluThinking');
+    if (el) el.remove();
+  }
+
+  function connectSSE() {
+    if (state.eventSource) state.eventSource.close();
+    var url = API_BASE + '/conversations/' + state.conversationId + '/events?after_seq=' + state.lastSeq;
+    state.eventSource = new EventSource(url);
+
+    state.eventSource.addEventListener('assistant.completed', function(e) {
+      removeThinking();
+      try {
+        var data = JSON.parse(e.data);
+        var msg = data.message || data;
+        if (msg.seq) state.lastSeq = msg.seq;
+        addMessage('assistant', msg.content || '', msg.citations || []);
+      } catch(err) {}
+    });
+
+    state.eventSource.addEventListener('assistant.error', function(e) {
+      removeThinking();
+      try {
+        var data = JSON.parse(e.data);
+        addMessage('assistant', data.error || 'Something went wrong. Please try again.', []);
+      } catch(err) {
+        addMessage('assistant', 'Something went wrong. Please try again.', []);
+      }
+    });
+
+    state.eventSource.onerror = function() {};
+  }
+
+  function sendMessage(text) {
+    if (!text.trim()) return;
+    addMessage('user', text);
+    addThinking();
+
+    bootstrap().then(function() {
+      return fetch(API_BASE + '/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          message: text,
+          conversation_id: state.conversationId
+        })
+      });
+    }).then(function(r) {
+      if (r.status === 429) { removeThinking(); addMessage('assistant', 'Rate limited. Please wait a moment and try again.', []); return; }
+      return r.json();
+    }).then(function(data) {
+      if (!data) return;
+      if (data.conversation_id) state.conversationId = data.conversation_id;
+      if (data.conversation_token) state.conversationToken = data.conversation_token;
+      saveState();
+      if (!state.eventSource || state.eventSource.readyState === 2) {
+        connectSSE();
+      }
+    }).catch(function() {
+      removeThinking();
+      addMessage('assistant', 'Failed to connect. Please try again.', []);
+    });
+  }
+
+  function handleAskSubmit() {
+    var text = askInput.value.trim();
+    if (!text) return;
+    askInput.value = '';
+    openPanel();
+    sendMessage(text);
+  }
+
+  function handleChatSubmit() {
+    var text = chatInput.value.trim();
+    if (!text) return;
+    chatInput.value = '';
+    sendMessage(text);
+  }
+
+  askInput.onkeydown = function(e) { if (e.key === 'Enter') handleAskSubmit(); };
+  askSubmit.onclick = handleAskSubmit;
+  chatInput.onkeydown = function(e) { if (e.key === 'Enter') handleChatSubmit(); };
+  sendBtn.onclick = handleChatSubmit;
+
+  panel.addEventListener('click', function(e) {
+    var actionBtn = e.target.closest('[data-velu-action]');
+    if (!actionBtn) return;
+    var action = actionBtn.getAttribute('data-velu-action');
+    if (action === 'close') {
+      closePanel();
+    } else if (action === 'expand') {
+      toggleExpand();
+    } else if (action === 'reset') {
+      resetChat();
+    }
+  });
+
+  document.addEventListener('click', function(e) {
+    var actionBtn = e.target.closest('[data-velu-action]');
+    if (!actionBtn) return;
+    var action = actionBtn.getAttribute('data-velu-action');
+    if (action === 'close') {
+      closePanel();
+    } else if (action === 'expand') {
+      toggleExpand();
+    } else if (action === 'reset') {
+      resetChat();
+    }
+  }, true);
+
+  // Hide ask bar only when user scrolls to the very bottom
+  window.addEventListener('scroll', function() {
+    if (isPanelOpen()) return;
+    var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    var docHeight = document.documentElement.scrollHeight;
+    var winHeight = window.innerHeight;
+    if (docHeight <= winHeight + 10) return; // short pages: always show
+    if (docHeight - scrollTop - winHeight < 60) {
+      askBar.classList.add('velu-ask-bar-hidden');
+    } else {
+      askBar.classList.remove('velu-ask-bar-hidden');
+    }
+  }, { passive: true });
+
+  document.onkeydown = function(e) {
+    if (e.key === 'Escape' && isPanelOpen()) { closePanel(); }
+  };
+
+  // Restore panel state from sessionStorage on page load
+  try {
+    var savedOpen = sessionStorage.getItem('velu-panel-open');
+    var savedExpanded = sessionStorage.getItem('velu-panel-expanded');
+    var savedMessages = sessionStorage.getItem('velu-panel-messages');
+    var savedConvId = sessionStorage.getItem('velu-conv-id');
+    var savedConvToken = sessionStorage.getItem('velu-conv-token');
+    var savedSeq = sessionStorage.getItem('velu-last-seq');
+    if (savedConvId) state.conversationId = savedConvId;
+    if (savedConvToken) state.conversationToken = savedConvToken;
+    if (savedSeq) state.lastSeq = parseInt(savedSeq, 10) || 0;
+    if (savedMessages) messagesEl.innerHTML = savedMessages;
+    if (savedExpanded === '1') {
+      state.expanded = true;
+      panel.classList.add('velu-assistant-expanded');
+      document.documentElement.classList.add('velu-assistant-wide');
+    }
+    if (savedOpen === '1') {
+      openPanel();
+      if (state.conversationId) connectSSE();
+    }
+  } catch(e) {}
+
+  bootstrap();
+})();
+</script>
 `;
   writeFileSync(join(outDir, "src", "components", "PageTitle.astro"), pageTitleComponent, "utf-8");
   console.log("📋 Generated page title component");
+
+  // ── 7b. Generate Footer.astro — Powered by Velu ────────────────────────
+  const footerComponent = `---
+import EditLink from 'virtual:starlight/components/EditLink';
+import LastUpdated from 'virtual:starlight/components/LastUpdated';
+import Pagination from 'virtual:starlight/components/Pagination';
+---
+
+<footer class="sl-flex">
+  <div class="meta sl-flex">
+    <EditLink />
+    <LastUpdated />
+  </div>
+  <Pagination />
+  <div class="velu-powered-by">
+    <a href="https://getvelu.com" target="_blank" rel="noopener noreferrer">Powered by Velu</a>
+  </div>
+</footer>
+
+<style>
+  footer {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .meta {
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+  .velu-powered-by {
+    text-align: right;
+    padding: 1rem 2rem 0.5rem 0;
+  }
+  .velu-powered-by a {
+    font-size: 1.4rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: rgba(160, 165, 180, 0.45);
+    text-decoration: none;
+    transition: color 0.25s ease;
+  }
+  .velu-powered-by a:hover {
+    color: rgba(220, 225, 240, 0.95);
+  }
+</style>
+`;
+  writeFileSync(join(outDir, "src", "components", "Footer.astro"), footerComponent, "utf-8");
+  console.log("📋 Generated footer component");
 
   // ── 8. Generate tabs.css ──────────────────────────────────────────────────
   const tabsCss = `/* ── Velu sidebar tabs ─────────────────────────────────────────────────── */
@@ -705,7 +1115,363 @@ const title = Astro.locals.starlightRoute.entry.data.title;
   writeFileSync(join(outDir, "src", "styles", "tabs.css"), tabsCss, "utf-8");
   console.log("🎨 Generated tabs.css");
 
-  // ── 9. Static boilerplate ─────────────────────────────────────────────────
+  // ── 9. Generate assistant.css ───────────────────────────────────────────
+  const assistantCss = `/* ── Velu AI Assistant ─────────────────────────────────────────────────── */
+
+/* Fixed bottom ask bar */
+.velu-ask-bar {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  width: 100%;
+  max-width: 36rem;
+  padding: 0 1rem;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.velu-ask-bar-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(1rem);
+}
+
+.velu-ask-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--sl-color-bg-nav);
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+.velu-ask-icon {
+  flex-shrink: 0;
+  color: var(--sl-color-gray-3);
+}
+
+.velu-ask-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-white);
+}
+
+.velu-ask-input::placeholder {
+  color: var(--sl-color-gray-3);
+}
+
+
+.velu-ask-submit {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--sl-color-accent);
+  color: var(--sl-color-accent-high);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.velu-ask-submit:hover { opacity: 0.85; }
+
+/* Right-side assistant panel */
+.velu-assistant-panel {
+  position: fixed;
+  top: var(--sl-nav-height, 3.5rem);
+  right: 0;
+  bottom: 0;
+  width: 22rem;
+  z-index: 50;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--sl-color-bg);
+  border-left: 1px solid var(--sl-color-gray-5);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.2);
+  transition: width 0.2s;
+}
+
+.velu-panel-closed { display: none !important; }
+
+.velu-assistant-expanded { width: 40rem; }
+
+.velu-assistant-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+  flex-shrink: 0;
+}
+
+.velu-assistant-title {
+  font-weight: 600;
+  font-size: var(--sl-text-base);
+  color: var(--sl-color-white);
+}
+
+.velu-assistant-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.velu-assistant-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: none;
+  border: none;
+  border-radius: 0.25rem;
+  color: var(--sl-color-gray-3);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.velu-assistant-action:hover {
+  color: var(--sl-color-white);
+  background-color: var(--sl-color-gray-6);
+}
+
+/* Messages area */
+.velu-assistant-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.velu-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.velu-msg-user { align-items: flex-end; }
+.velu-msg-assistant { align-items: flex-start; }
+
+.velu-msg-bubble {
+  max-width: 85%;
+  padding: 0.6rem 0.85rem;
+  border-radius: 0.75rem;
+  font-size: var(--sl-text-sm);
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.velu-msg-bubble code {
+  background: var(--sl-color-gray-6);
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.2rem;
+  font-size: 0.85em;
+}
+
+.velu-msg-bubble-user {
+  background: var(--sl-color-accent);
+  color: var(--sl-color-accent-high);
+  border-bottom-right-radius: 0.2rem;
+}
+
+.velu-msg-bubble-assistant {
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-white);
+  border-bottom-left-radius: 0.2rem;
+}
+
+/* Citations */
+.velu-msg-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding-left: 0.25rem;
+}
+
+.velu-citation-link {
+  font-size: var(--sl-text-xs);
+  color: var(--sl-color-accent);
+  text-decoration: none;
+  padding: 0.15rem 0.4rem;
+  background: var(--sl-color-gray-6);
+  border-radius: 0.25rem;
+  transition: background-color 0.15s;
+}
+
+.velu-citation-link:hover {
+  background: var(--sl-color-gray-5);
+}
+
+.velu-citation-ref {
+  color: var(--sl-color-accent);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.8em;
+  vertical-align: super;
+}
+
+/* Message actions */
+.velu-msg-actions {
+  display: flex;
+  gap: 0.15rem;
+  padding-left: 0.25rem;
+}
+
+.velu-msg-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  border-radius: 0.25rem;
+  color: var(--sl-color-gray-4);
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.velu-msg-action:hover {
+  color: var(--sl-color-white);
+  background-color: var(--sl-color-gray-6);
+}
+
+/* Thinking dots */
+.velu-thinking-dots {
+  display: inline-flex;
+  gap: 0.3rem;
+  padding: 0.2rem 0;
+}
+
+.velu-thinking-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sl-color-gray-3);
+  animation: veluDotPulse 1.2s infinite;
+}
+
+.velu-thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.velu-thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes veluDotPulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+/* Chat input area */
+.velu-assistant-input-area {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--sl-color-gray-5);
+  flex-shrink: 0;
+}
+
+.velu-assistant-chat-input {
+  flex: 1;
+  background: var(--sl-color-gray-6);
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-white);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.velu-assistant-chat-input:focus {
+  border-color: var(--sl-color-accent);
+}
+
+.velu-assistant-chat-input::placeholder {
+  color: var(--sl-color-gray-3);
+}
+
+.velu-assistant-send {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--sl-color-accent);
+  color: var(--sl-color-accent-high);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.velu-assistant-send:hover { opacity: 0.85; }
+
+/* Squeeze page layout when panel is open */
+html.velu-assistant-open body {
+  margin-right: 22rem;
+  transition: margin-right 0.25s ease;
+}
+
+html.velu-assistant-wide body {
+  margin-right: 40rem;
+}
+
+html.velu-assistant-open .header {
+  padding-right: 22rem;
+  transition: padding-right 0.25s ease;
+}
+
+html.velu-assistant-wide .header {
+  padding-right: 40rem;
+}
+
+html.velu-assistant-open .velu-ask-bar {
+  right: 22rem;
+  left: auto;
+  transform: none;
+}
+
+html.velu-assistant-wide .velu-ask-bar {
+  right: 40rem;
+}
+
+/* Responsive */
+@media (max-width: 50rem) {
+  .velu-assistant-panel {
+    width: 100%;
+  }
+  .velu-assistant-expanded {
+    width: 100%;
+  }
+  .velu-ask-bar {
+    max-width: calc(100% - 2rem);
+  }
+  html.velu-assistant-open body {
+    margin-right: 0;
+  }
+  html.velu-assistant-wide body {
+    margin-right: 0;
+  }
+}
+`;
+  writeFileSync(join(outDir, "src", "styles", "assistant.css"), assistantCss, "utf-8");
+  console.log("🤖 Generated assistant.css");
+
+  // ── 10. Static boilerplate ─────────────────────────────────────────────────
   const astroPkg = {
     name: "velu-docs-site",
     version: "0.0.1",
