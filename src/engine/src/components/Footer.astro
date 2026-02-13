@@ -1,0 +1,44 @@
+---
+import EditLink from 'virtual:starlight/components/EditLink';
+import LastUpdated from 'virtual:starlight/components/LastUpdated';
+import Pagination from 'virtual:starlight/components/Pagination';
+---
+
+<footer class="sl-flex">
+  <div class="meta sl-flex">
+    <EditLink />
+    <LastUpdated />
+  </div>
+  <Pagination />
+  <div class="velu-powered-by">
+    <a href="https://getvelu.com" target="_blank" rel="noopener noreferrer">Powered by Velu</a>
+  </div>
+</footer>
+
+<style>
+  footer {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .meta {
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+  .velu-powered-by {
+    text-align: right;
+    padding: 1rem 2rem 0.5rem 0;
+  }
+  .velu-powered-by a {
+    font-size: 1.4rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: rgba(160, 165, 180, 0.45);
+    text-decoration: none;
+    transition: color 0.25s ease;
+  }
+  .velu-powered-by a:hover {
+    color: rgba(220, 225, 240, 0.95);
+  }
+</style>

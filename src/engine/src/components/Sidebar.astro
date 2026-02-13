@@ -1,0 +1,60 @@
+---
+import MobileMenuFooter from 'virtual:starlight/components/MobileMenuFooter';
+import SidebarSublist from '@astrojs/starlight/components/SidebarSublist.astro';
+import { getTabs, getTabSidebarMap } from '../lib/velu.ts';
+
+const tabs = getTabs();
+const tabSidebarMap = getTabSidebarMap();
+const currentPath = Astro.url.pathname;
+
+function isTabActive(tab: any, path: string): boolean {
+  if (tab.href) return false;
+  if (!tab.slugs || tab.slugs.length === 0) return false;
+  return tab.slugs.some((s: string) => path.startsWith('/' + s + '/'));
+}
+
+function getActiveTabSlug(path: string): string {
+  const allPrefixes = Object.keys(tabSidebarMap);
+  for (const prefix of allPrefixes) {
+    if (path.startsWith('/' + prefix + '/')) return prefix;
+  }
+  return '';
+}
+
+const activeSlug = getActiveTabSlug(currentPath);
+const visibleLabels = new Set(tabSidebarMap[activeSlug] || []);
+
+const { sidebar } = Astro.locals.starlightRoute;
+const filteredSidebar = sidebar.filter((entry: any) => {
+  if (entry.type === 'group') return visibleLabels.has(entry.label);
+  return false;
+});
+---
+
+<div class="velu-sidebar-tabs">
+  {tabs.map((tab) => {
+    if (tab.href) {
+      return (
+        <a href={tab.href} class="velu-sidebar-tab" target="_blank" rel="noopener noreferrer">
+          {tab.icon && <span class="velu-sidebar-tab-icon" data-icon={tab.icon} />}
+          <span>{tab.label}</span>
+          <svg class="velu-external-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg>
+        </a>
+      );
+    }
+    const active = isTabActive(tab, currentPath);
+    const href = tab.firstPage ? '/' + tab.firstPage + '/' : '/';
+    return (
+      <a href={href} class:list={['velu-sidebar-tab', { active }]}>
+        {tab.icon && <span class="velu-sidebar-tab-icon" data-icon={tab.icon} />}
+        <span>{tab.label}</span>
+      </a>
+    );
+  })}
+</div>
+
+<SidebarSublist sublist={filteredSidebar} />
+
+<div class="md:sl-hidden">
+  <MobileMenuFooter />
+</div>

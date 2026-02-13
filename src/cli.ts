@@ -1,4 +1,4 @@
-import { resolve, join, dirname } from "node:path";
+import { resolve, join, dirname, delimiter } from "node:path";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -6,6 +6,16 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const PACKAGE_ROOT = resolve(dirname(__filename), "..");
 const SCHEMA_PATH = join(PACKAGE_ROOT, "schema", "velu.schema.json");
+const NODE_MODULES_PATH = join(PACKAGE_ROOT, "node_modules");
+
+/** Build env that lets spawned processes resolve deps from the CLI's own node_modules */
+function engineEnv(): NodeJS.ProcessEnv {
+  const existing = process.env.NODE_PATH || "";
+  return {
+    ...process.env,
+    NODE_PATH: existing ? `${NODE_MODULES_PATH}${delimiter}${existing}` : NODE_MODULES_PATH,
+  };
+}
 
 // ── Help ────────────────────────────────────────────────────────────────────────
 
@@ -42,18 +52,21 @@ function init(targetDir: string) {
     navigation: {
       tabs: [
         {
-          tab: "API Reference",
-          pages: ["api-reference/overview", "api-reference/authentication"],
-        },
-      ],
-      groups: [
-        {
-          group: "Getting Started",
+          tab: "Getting Started",
+          slug: "getting-started",
           pages: ["quickstart", "installation"],
+          groups: [
+            {
+              group: "Guides",
+              slug: "guides",
+              pages: ["guides/configuration", "guides/deployment"],
+            },
+          ],
         },
         {
-          group: "Guides",
-          pages: ["guides/configuration", "guides/deployment"],
+          tab: "API Reference",
+          slug: "api-reference",
+          pages: ["api-reference/overview", "api-reference/authentication"],
         },
       ],
     },
@@ -64,7 +77,7 @@ function init(targetDir: string) {
   const pages: Record<string, string> = {
     "quickstart.md": `# Quickstart\n\nWelcome to your new documentation site!\n\n## Prerequisites\n\n- Node.js 18+\n- npm\n\n## Getting Started\n\n1. Edit the markdown files in this directory\n2. Update \`velu.json\` to configure navigation\n3. Run \`velu run\` to start the dev server\n\n\`\`\`bash\nvelu run\n\`\`\`\n\nYour site is live at \`http://localhost:4321\`.\n`,
     "installation.md": `# Installation\n\nInstall Velu globally:\n\n\`\`\`bash\nnpm install -g @aravindc26/velu\n\`\`\`\n\nOr run directly with npx:\n\n\`\`\`bash\nnpx @aravindc26/velu run\n\`\`\`\n`,
-    "guides/configuration.md": `# Configuration\n\nVelu uses a \`velu.json\` file to define your site's navigation.\n\n## Navigation Structure\n\n- **Tabs** — Top-level horizontal navigation\n- **Groups** — Collapsible sidebar sections\n- **Pages** — Individual markdown documents\n\n## Example\n\n\`\`\`json\n{\n  "navigation": {\n    "groups": [\n      {\n        "group": "Getting Started",\n        "pages": ["quickstart"]\n      }\n    ]\n  }\n}\n\`\`\`\n`,
+    "guides/configuration.md": `# Configuration\n\nVelu uses a \`velu.json\` file to define your site's navigation.\n\n## Navigation Structure\n\n- **Tabs** — Top-level horizontal navigation\n- **Groups** — Collapsible sidebar sections within a tab\n- **Pages** — Individual markdown documents\n\n## Example\n\n\`\`\`json\n{\n  "navigation": {\n    "tabs": [\n      {\n        "tab": "Getting Started",\n        "slug": "getting-started",\n        "groups": [\n          {\n            "group": "Basics",\n            "slug": "getting-started",\n            "pages": ["quickstart"]\n          }\n        ]\n      }\n    ]\n  }\n}\n\`\`\`\n`,
     "guides/deployment.md": `# Deployment\n\nBuild your site for production:\n\n\`\`\`bash\nvelu build\n\`\`\`\n\nThe output is a static site you can deploy anywhere — Netlify, Vercel, GitHub Pages, etc.\n`,
     "api-reference/overview.md": `# API Overview\n\nThis section covers the API reference for your project.\n\n## Endpoints\n\n| Method | Path | Description |\n|--------|------|-------------|\n| GET | /api/health | Health check |\n| POST | /api/data | Create data |\n`,
     "api-reference/authentication.md": `# Authentication\n\nAll API requests require an API key.\n\n## Headers\n\n\`\`\`\nAuthorization: Bearer YOUR_API_KEY\n\`\`\`\n\n## Getting an API Key\n\nVisit the dashboard to generate your API key.\n`,
@@ -122,6 +135,7 @@ async function buildStatic(outDir: string) {
     const child = spawn("node", ["_server.mjs", "build"], {
       cwd: outDir,
       stdio: "inherit",
+      env: engineEnv(),
     });
     child.on("exit", (code) => (code === 0 ? res() : rej(new Error(`Build exited with ${code}`))));
   });
@@ -129,7 +143,6 @@ async function buildStatic(outDir: string) {
 
 async function buildSite(docsDir: string) {
   const outDir = await generateProject(docsDir);
-  await installDeps(outDir);
   await buildStatic(outDir);
   const distDir = join(outDir, "dist");
   console.log(`\n📁 Static site output: ${distDir}`);
@@ -137,24 +150,11 @@ async function buildSite(docsDir: string) {
 
 // ── run ──────────────────────────────────────────────────────────────────────────
 
-async function installDeps(outDir: string) {
-  if (!existsSync(join(outDir, "node_modules"))) {
-    console.log("\n📦 Installing dependencies...\n");
-    await new Promise<void>((res, rej) => {
-      const child = spawn("npm", ["install", "--silent"], {
-        cwd: outDir,
-        stdio: "inherit",
-        shell: true,
-      });
-      child.on("exit", (code) => (code === 0 ? res() : rej(new Error(`npm install exited with ${code}`))));
-    });
-  }
-}
-
 function spawnServer(outDir: string, command: string, port: number) {
   const child = spawn("node", ["_server.mjs", command, "--port", String(port)], {
     cwd: outDir,
     stdio: "inherit",
+    env: engineEnv(),
   });
 
   child.on("exit", (code) => process.exit(code ?? 0));
@@ -166,7 +166,6 @@ function spawnServer(outDir: string, command: string, port: number) {
 
 async function run(docsDir: string, port: number) {
   const outDir = await generateProject(docsDir);
-  await installDeps(outDir);
   spawnServer(outDir, "dev", port);
 }
 

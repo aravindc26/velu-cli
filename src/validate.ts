@@ -5,6 +5,7 @@ import { resolve, join } from "node:path";
 
 interface VeluGroup {
   group: string;
+  slug: string;
   icon?: string;
   tag?: string;
   expanded?: boolean;
@@ -13,6 +14,7 @@ interface VeluGroup {
 
 interface VeluTab {
   tab: string;
+  slug: string;
   icon?: string;
   href?: string;
   pages?: string[];
@@ -26,9 +28,7 @@ interface VeluConfig {
   appearance?: "system" | "light" | "dark";
   styling?: { codeblocks?: { theme?: string | { light: string; dark: string } } };
   navigation: {
-    tabs?: VeluTab[];
-    groups?: VeluGroup[];
-    pages?: string[];
+    tabs: VeluTab[];
   };
 }
 
@@ -50,27 +50,13 @@ function collectPages(config: VeluConfig): string[] {
     }
   }
 
-  const nav = config.navigation;
-
-  if (nav.pages) {
-    pages.push(...nav.pages);
-  }
-
-  if (nav.groups) {
-    for (const group of nav.groups) {
-      collectFromGroup(group);
+  for (const tab of config.navigation.tabs) {
+    if (tab.pages) {
+      pages.push(...tab.pages);
     }
-  }
-
-  if (nav.tabs) {
-    for (const tab of nav.tabs) {
-      if (tab.pages) {
-        pages.push(...tab.pages);
-      }
-      if (tab.groups) {
-        for (const group of tab.groups) {
-          collectFromGroup(group);
-        }
+    if (tab.groups) {
+      for (const group of tab.groups) {
+        collectFromGroup(group);
       }
     }
   }

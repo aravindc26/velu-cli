@@ -1,6 +1,6 @@
 {
   "name": "@aravindc26/velu",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "A modern documentation site generator powered by Markdown and JSON configuration",
   "type": "module",
   "license": "MIT",
@@ -24,6 +24,10 @@
   "dependencies": {
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
+    "astro": "^5.12.0",
+    "@astrojs/starlight": "^0.35.0",
+    "sharp": "^0.33.0",
+    "starlight-ion-theme": "^2.3.0",
     "tsx": "^4.19.0"
   },
   "devDependencies": {

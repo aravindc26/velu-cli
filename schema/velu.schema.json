@@ -75,28 +75,16 @@
     },
     "navigation": {
       "type": "object",
-      "description": "Defines the site navigation hierarchy: tabs → groups → pages.",
+      "description": "Defines the site navigation hierarchy: tabs → groups → pages. Groups must belong to a tab.",
+      "required": ["tabs"],
       "properties": {
         "tabs": {
           "type": "array",
-          "description": "Top-level navigation tabs.",
+          "description": "Top-level navigation tabs. Each tab contains groups and/or pages.",
           "items": {
             "$ref": "#/definitions/tab"
-          }
-        },
-        "groups": {
-          "type": "array",
-          "description": "Top-level navigation groups (used when there are no tabs, or as default content).",
-          "items": {
-            "$ref": "#/definitions/group"
-          }
-        },
-        "pages": {
-          "type": "array",
-          "description": "Top-level standalone pages.",
-          "items": {
-            "$ref": "#/definitions/page"
-          }
+          },
+          "minItems": 1
         }
       },
       "additionalProperties": false
@@ -111,11 +99,16 @@
     "group": {
       "type": "object",
       "description": "A group of pages, optionally nested.",
-      "required": ["group", "pages"],
+      "required": ["group", "slug", "pages"],
       "properties": {
         "group": {
           "type": "string",
           "description": "Display name for the group."
+        },
+        "slug": {
+          "type": "string",
+          "description": "URL slug prefix for pages in this group. Used as the route prefix: /<slug>/<page-basename>.",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
         },
         "icon": {
           "type": "string",
@@ -146,11 +139,16 @@
     "tab": {
       "type": "object",
       "description": "A top-level navigation tab.",
-      "required": ["tab"],
+      "required": ["tab", "slug"],
       "properties": {
         "tab": {
           "type": "string",
           "description": "Display name for the tab."
+        },
+        "slug": {
+          "type": "string",
+          "description": "URL slug prefix for pages in this tab. Used as the route prefix: /<slug>/<page-basename>.",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
         },
         "icon": {
           "type": "string",
