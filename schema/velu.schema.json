@@ -73,20 +73,118 @@
       },
       "additionalProperties": false
     },
+    "languages": {
+      "type": "array",
+      "description": "Supported language codes (e.g. [\"en\", \"es\", \"ja\"]). The first is the default. Display labels are auto-derived.",
+      "items": {
+        "type": "string",
+        "description": "BCP 47 language code (e.g. en, es, fr, ja, zh)."
+      },
+      "minItems": 1
+    },
     "navigation": {
       "type": "object",
-      "description": "Defines the site navigation hierarchy: tabs → groups → pages. Groups must belong to a tab.",
-      "required": ["tabs"],
+      "description": "Defines the site navigation hierarchy. Use 'tabs' for single-language sites, or 'languages' for per-language navigation (like Mintlify).",
       "properties": {
         "tabs": {
           "type": "array",
-          "description": "Top-level navigation tabs. Each tab contains groups and/or pages.",
+          "description": "Top-level navigation tabs (single-language mode). Ignored when 'languages' is present.",
           "items": {
             "$ref": "#/definitions/tab"
           },
           "minItems": 1
+        },
+        "dropdowns": {
+          "type": "array",
+          "description": "Top-level dropdown containers. Each dropdown can include groups, pages, anchors, or links.",
+          "items": {
+            "$ref": "#/definitions/dropdown"
+          },
+          "minItems": 1
+        },
+        "groups": {
+          "type": "array",
+          "description": "Top-level sidebar groups when tabs/dropdowns are not used.",
+          "items": {
+            "$ref": "#/definitions/group"
+          },
+          "minItems": 1
+        },
+        "pages": {
+          "type": "array",
+          "description": "Top-level pages when tabs/dropdowns are not used.",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/definitions/page" },
+              { "$ref": "#/definitions/separator" },
+              { "$ref": "#/definitions/link" }
+            ]
+          },
+          "minItems": 1
+        },
+        "languages": {
+          "type": "array",
+          "description": "Per-language navigation. Each entry defines tabs/groups/pages for one language. First entry is the default language (no URL prefix).",
+          "items": {
+            "$ref": "#/definitions/languageNav"
+          },
+          "minItems": 1
+        },
+        "products": {
+          "type": "array",
+          "description": "Multi-product navigation. Each product can define its own tabs or top-level pages.",
+          "items": {
+            "$ref": "#/definitions/productNav"
+          },
+          "minItems": 1
+        },
+        "versions": {
+          "type": "array",
+          "description": "Versioned navigation. Each version defines its own set of tabs.",
+          "items": {
+            "$ref": "#/definitions/versionNav"
+          },
+          "minItems": 1
+        },
+        "anchors": {
+          "type": "array",
+          "description": "Prominent external links displayed in the navbar (e.g. GitHub, Discord).",
+          "items": {
+            "$ref": "#/definitions/anchor"
+          }
+        },
+        "global": {
+          "type": "object",
+          "description": "Cross-cutting navigation elements visible on every page.",
+          "properties": {
+            "tabs": {
+              "type": "array",
+              "description": "Global external tabs shown across all pages.",
+              "items": {
+                "$ref": "#/definitions/globalTab"
+              }
+            },
+            "anchors": {
+              "type": "array",
+              "description": "Global anchors shown across all tabs.",
+              "items": {
+                "$ref": "#/definitions/anchor"
+              }
+            }
+          },
+          "additionalProperties": false
         }
       },
+      "anyOf": [
+        { "required": ["tabs"] },
+        { "required": ["dropdowns"] },
+        { "required": ["groups"] },
+        { "required": ["pages"] },
+        { "required": ["languages"] },
+        { "required": ["products"] },
+        { "required": ["versions"] },
+        { "required": ["anchors"] }
+      ],
       "additionalProperties": false
     }
   },
@@ -94,12 +192,27 @@
   "definitions": {
     "page": {
       "type": "string",
-      "description": "Reference to a markdown file relative to the docs directory (without .md extension). E.g. 'quickstart' → docs/quickstart.md, 'writing-content/page' → docs/writing-content/page.md."
+      "description": "Explicit markdown file path relative to the docs directory (without .md extension). No automatic language fallback is applied. Example: 'quickstart' → docs/quickstart.md, 'ja/quickstart' → docs/ja/quickstart.md, 'writing-content/page' → docs/writing-content/page.md."
+    },
+    "href": {
+      "type": "string",
+      "description": "Navigation link target. Supports absolute URLs and internal paths (for example '/changelog' or 'guides/intro').",
+      "anyOf": [
+        {
+          "format": "uri"
+        },
+        {
+          "pattern": "^/[^\\s]*$"
+        },
+        {
+          "pattern": "^(?![a-zA-Z][a-zA-Z\\d+.-]*:)[^\\s]+$"
+        }
+      ]
     },
     "group": {
       "type": "object",
       "description": "A group of pages, optionally nested.",
-      "required": ["group", "slug", "pages"],
+      "required": ["group", "pages"],
       "properties": {
         "group": {
           "type": "string",
@@ -123,13 +236,24 @@
           "description": "Whether the group is expanded by default. Defaults to true.",
           "default": true
         },
+        "description": {
+          "type": "string",
+          "description": "Optional description displayed below the group name."
+        },
+        "hidden": {
+          "type": "boolean",
+          "description": "Whether the group is hidden from navigation. Defaults to false.",
+          "default": false
+        },
         "pages": {
           "type": "array",
-          "description": "Pages or nested groups within this group.",
+          "description": "Pages, nested groups, separators, or external links within this group.",
           "items": {
             "oneOf": [
               { "$ref": "#/definitions/page" },
-              { "$ref": "#/definitions/group" }
+              { "$ref": "#/definitions/group" },
+              { "$ref": "#/definitions/separator" },
+              { "$ref": "#/definitions/link" }
             ]
           }
         }
@@ -139,7 +263,7 @@
     "tab": {
       "type": "object",
       "description": "A top-level navigation tab.",
-      "required": ["tab", "slug"],
+      "required": ["tab"],
       "properties": {
         "tab": {
           "type": "string",
@@ -147,7 +271,7 @@
         },
         "slug": {
           "type": "string",
-          "description": "URL slug prefix for pages in this tab. Used as the route prefix: /<slug>/<page-basename>.",
+          "description": "Optional URL slug prefix for pages in this tab. If omitted, Velu derives one from the tab label.",
           "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
         },
         "icon": {
@@ -155,15 +279,17 @@
           "description": "Icon identifier for the tab."
         },
         "href": {
-          "type": "string",
-          "description": "External link URL. When set, the tab links externally instead of showing pages.",
-          "format": "uri"
+          "$ref": "#/definitions/href"
         },
         "pages": {
           "type": "array",
-          "description": "Standalone pages directly under this tab.",
+          "description": "Standalone pages, separators, or external links directly under this tab.",
           "items": {
-            "$ref": "#/definitions/page"
+            "oneOf": [
+              { "$ref": "#/definitions/page" },
+              { "$ref": "#/definitions/separator" },
+              { "$ref": "#/definitions/link" }
+            ]
           }
         },
         "groups": {
@@ -171,6 +297,27 @@
           "description": "Groups of pages under this tab.",
           "items": {
             "$ref": "#/definitions/group"
+          }
+        },
+        "menu": {
+          "type": "array",
+          "description": "Optional menu items for this tab. Each menu item is normalized into a sidebar group.",
+          "items": {
+            "$ref": "#/definitions/menuItem"
+          }
+        },
+        "anchors": {
+          "type": "array",
+          "description": "Anchors nested under this tab.",
+          "items": {
+            "$ref": "#/definitions/anchor"
+          }
+        },
+        "dropdowns": {
+          "type": "array",
+          "description": "Dropdowns nested under this tab.",
+          "items": {
+            "$ref": "#/definitions/dropdown"
           }
         }
       },
@@ -181,7 +328,10 @@
           "not": {
             "anyOf": [
               { "required": ["pages"] },
-              { "required": ["groups"] }
+              { "required": ["groups"] },
+              { "required": ["menu"] },
+              { "required": ["anchors"] },
+              { "required": ["dropdowns"] }
             ]
           }
         },
@@ -189,10 +339,558 @@
           "not": { "required": ["href"] },
           "anyOf": [
             { "required": ["pages"] },
-            { "required": ["groups"] }
+            { "required": ["groups"] },
+            { "required": ["menu"] },
+            { "required": ["anchors"] },
+            { "required": ["dropdowns"] }
           ]
         }
       ]
+    },
+    "dropdown": {
+      "type": "object",
+      "description": "A dropdown navigation container.",
+      "required": ["dropdown"],
+      "properties": {
+        "dropdown": {
+          "type": "string",
+          "description": "Display label for the dropdown."
+        },
+        "slug": {
+          "type": "string",
+          "description": "Optional URL slug for this dropdown.",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier for the dropdown."
+        },
+        "href": {
+          "$ref": "#/definitions/href"
+        },
+        "pages": {
+          "type": "array",
+          "description": "Pages directly under this dropdown.",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/definitions/page" },
+              { "$ref": "#/definitions/separator" },
+              { "$ref": "#/definitions/link" }
+            ]
+          }
+        },
+        "groups": {
+          "type": "array",
+          "description": "Groups nested under this dropdown.",
+          "items": {
+            "$ref": "#/definitions/group"
+          }
+        },
+        "menu": {
+          "type": "array",
+          "description": "Menu items nested under this dropdown.",
+          "items": {
+            "$ref": "#/definitions/menuItem"
+          }
+        },
+        "anchors": {
+          "type": "array",
+          "description": "Anchors nested under this dropdown.",
+          "items": {
+            "$ref": "#/definitions/anchor"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": ["href"],
+          "not": {
+            "anyOf": [
+              { "required": ["pages"] },
+              { "required": ["groups"] },
+              { "required": ["menu"] },
+              { "required": ["anchors"] }
+            ]
+          }
+        },
+        {
+          "not": { "required": ["href"] },
+          "anyOf": [
+            { "required": ["pages"] },
+            { "required": ["groups"] },
+            { "required": ["menu"] },
+            { "required": ["anchors"] }
+          ]
+        }
+      ]
+    },
+    "menuItem": {
+      "type": "object",
+      "description": "A named menu item within a tab. Normalized into a sidebar group.",
+      "required": ["item"],
+      "properties": {
+        "item": {
+          "type": "string",
+          "description": "Display label for the menu item."
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier for the menu item."
+        },
+        "pages": {
+          "type": "array",
+          "description": "Pages directly under this menu item.",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/definitions/page" },
+              { "$ref": "#/definitions/separator" },
+              { "$ref": "#/definitions/link" }
+            ]
+          }
+        },
+        "groups": {
+          "type": "array",
+          "description": "Groups nested under this menu item.",
+          "items": {
+            "$ref": "#/definitions/group"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        { "required": ["pages"] },
+        { "required": ["groups"] }
+      ]
+    },
+    "separator": {
+      "type": "object",
+      "description": "A visual separator/label in the sidebar navigation.",
+      "required": ["separator"],
+      "properties": {
+        "separator": {
+          "type": "string",
+          "description": "Label text for the separator."
+        }
+      },
+      "additionalProperties": false
+    },
+    "link": {
+      "type": "object",
+      "description": "An external link displayed in the sidebar.",
+      "required": ["href", "label"],
+      "properties": {
+        "href": {
+          "$ref": "#/definitions/href"
+        },
+        "label": {
+          "type": "string",
+          "description": "Display text for the link."
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier for the link."
+        }
+      },
+      "additionalProperties": false
+    },
+    "anchor": {
+      "type": "object",
+      "description": "A prominent navigation anchor. Can be an external link or a container of tabs.",
+      "required": ["anchor"],
+      "properties": {
+        "anchor": {
+          "type": "string",
+          "description": "Display name for the anchor."
+        },
+        "href": {
+          "$ref": "#/definitions/href"
+        },
+        "tabs": {
+          "type": "array",
+          "description": "Optional tabs promoted to top-level navigation under this anchor.",
+          "items": {
+            "$ref": "#/definitions/tab"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "description": "Groups nested under this anchor.",
+          "items": {
+            "$ref": "#/definitions/group"
+          }
+        },
+        "pages": {
+          "type": "array",
+          "description": "Pages nested under this anchor.",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/definitions/page" },
+              { "$ref": "#/definitions/separator" },
+              { "$ref": "#/definitions/link" }
+            ]
+          }
+        },
+        "menu": {
+          "type": "array",
+          "description": "Menu items nested under this anchor.",
+          "items": {
+            "$ref": "#/definitions/menuItem"
+          }
+        },
+        "anchors": {
+          "type": "array",
+          "description": "Anchors nested under this anchor.",
+          "items": {
+            "$ref": "#/definitions/anchor"
+          }
+        },
+        "dropdowns": {
+          "type": "array",
+          "description": "Dropdowns nested under this anchor.",
+          "items": {
+            "$ref": "#/definitions/dropdown"
+          }
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier for the anchor."
+        },
+        "color": {
+          "type": "object",
+          "description": "Optional light/dark color hints for displaying this anchor.",
+          "properties": {
+            "light": {
+              "type": "string",
+              "description": "Color used in light mode (hex).",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "dark": {
+              "type": "string",
+              "description": "Color used in dark mode (hex).",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            }
+          },
+          "required": ["light", "dark"],
+          "additionalProperties": false
+        },
+        "hidden": {
+          "type": "boolean",
+          "description": "Whether the anchor is hidden. Defaults to false.",
+          "default": false
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["href"],
+          "not": {
+            "anyOf": [
+              { "required": ["tabs"] },
+              { "required": ["groups"] },
+              { "required": ["pages"] },
+              { "required": ["menu"] },
+              { "required": ["anchors"] },
+              { "required": ["dropdowns"] }
+            ]
+          }
+        },
+        {
+          "not": { "required": ["href"] },
+          "anyOf": [
+            { "required": ["tabs"] },
+            { "required": ["groups"] },
+            { "required": ["pages"] },
+            { "required": ["menu"] },
+            { "required": ["anchors"] },
+            { "required": ["dropdowns"] }
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "productNav": {
+      "type": "object",
+      "description": "Navigation definition for a product docs area.",
+      "required": ["product"],
+      "properties": {
+        "product": {
+          "type": "string",
+          "description": "Product label (used for route prefix derivation)."
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier for the product."
+        },
+        "name": {
+          "type": "string",
+          "description": "Optional display name for the product."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional description for the product."
+        },
+        "hidden": {
+          "type": "boolean",
+          "description": "Whether this product is hidden from navigation. Defaults to false.",
+          "default": false
+        },
+        "href": {
+          "$ref": "#/definitions/href"
+        },
+        "color": {
+          "type": "object",
+          "description": "Optional light/dark color hints for this product.",
+          "properties": {
+            "light": {
+              "type": "string",
+              "description": "Color used in light mode (hex).",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "dark": {
+              "type": "string",
+              "description": "Color used in dark mode (hex).",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            }
+          },
+          "required": ["light", "dark"],
+          "additionalProperties": false
+        },
+        "tabs": {
+          "type": "array",
+          "description": "Tabs within this product.",
+          "items": {
+            "$ref": "#/definitions/tab"
+          }
+        },
+        "dropdowns": {
+          "type": "array",
+          "description": "Dropdowns within this product.",
+          "items": {
+            "$ref": "#/definitions/dropdown"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "description": "Groups directly within this product.",
+          "items": {
+            "$ref": "#/definitions/group"
+          }
+        },
+        "pages": {
+          "type": "array",
+          "description": "Pages directly under this product when tabs are not needed.",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/definitions/page" },
+              { "$ref": "#/definitions/separator" },
+              { "$ref": "#/definitions/link" }
+            ]
+          }
+        },
+        "menu": {
+          "type": "array",
+          "description": "Menu items directly within this product.",
+          "items": {
+            "$ref": "#/definitions/menuItem"
+          }
+        },
+        "anchors": {
+          "type": "array",
+          "description": "Anchors directly within this product.",
+          "items": {
+            "$ref": "#/definitions/anchor"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        { "required": ["href"] },
+        { "required": ["tabs"] },
+        { "required": ["dropdowns"] },
+        { "required": ["groups"] },
+        { "required": ["pages"] },
+        { "required": ["menu"] },
+        { "required": ["anchors"] }
+      ]
+    },
+    "versionNav": {
+      "type": "object",
+      "description": "Navigation definition for a specific docs version.",
+      "required": ["version"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "Version label (used for route prefix derivation)."
+        },
+        "default": {
+          "type": "boolean",
+          "description": "Whether this is the default version.",
+          "default": false
+        },
+        "hidden": {
+          "type": "boolean",
+          "description": "Whether this version is hidden from navigation. Defaults to false.",
+          "default": false
+        },
+        "href": {
+          "$ref": "#/definitions/href"
+        },
+        "tabs": {
+          "type": "array",
+          "description": "Tabs for this version.",
+          "items": {
+            "$ref": "#/definitions/tab"
+          }
+        },
+        "dropdowns": {
+          "type": "array",
+          "description": "Dropdowns for this version.",
+          "items": {
+            "$ref": "#/definitions/dropdown"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "description": "Groups for this version.",
+          "items": {
+            "$ref": "#/definitions/group"
+          }
+        },
+        "pages": {
+          "type": "array",
+          "description": "Pages for this version.",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/definitions/page" },
+              { "$ref": "#/definitions/separator" },
+              { "$ref": "#/definitions/link" }
+            ]
+          }
+        },
+        "menu": {
+          "type": "array",
+          "description": "Menu items for this version.",
+          "items": {
+            "$ref": "#/definitions/menuItem"
+          }
+        },
+        "anchors": {
+          "type": "array",
+          "description": "Anchors for this version.",
+          "items": {
+            "$ref": "#/definitions/anchor"
+          }
+        }
+      },
+      "anyOf": [
+        { "required": ["href"] },
+        { "required": ["tabs"] },
+        { "required": ["dropdowns"] },
+        { "required": ["groups"] },
+        { "required": ["pages"] },
+        { "required": ["menu"] },
+        { "required": ["anchors"] }
+      ],
+      "additionalProperties": false
+    },
+    "globalTab": {
+      "type": "object",
+      "description": "Global external tab shown in the navbar across all pages.",
+      "required": ["tab", "href"],
+      "properties": {
+        "tab": {
+          "type": "string",
+          "description": "Display name for the global tab."
+        },
+        "href": {
+          "$ref": "#/definitions/href"
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier for the global tab."
+        }
+      },
+      "additionalProperties": false
+    },
+    "languageNav": {
+      "type": "object",
+      "description": "Per-language navigation entry. Defines the full tab/group/page structure for one language.",
+      "required": ["language"],
+      "properties": {
+        "language": {
+          "type": "string",
+          "description": "BCP 47 language code (e.g. en, es, ja)."
+        },
+        "default": {
+          "type": "boolean",
+          "description": "Whether this is the default language.",
+          "default": false
+        },
+        "hidden": {
+          "type": "boolean",
+          "description": "Whether this language is hidden from navigation. Defaults to false.",
+          "default": false
+        },
+        "href": {
+          "$ref": "#/definitions/href"
+        },
+        "tabs": {
+          "type": "array",
+          "description": "Navigation tabs for this language.",
+          "items": {
+            "$ref": "#/definitions/tab"
+          }
+        },
+        "dropdowns": {
+          "type": "array",
+          "description": "Dropdowns for this language.",
+          "items": {
+            "$ref": "#/definitions/dropdown"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "description": "Groups for this language.",
+          "items": {
+            "$ref": "#/definitions/group"
+          }
+        },
+        "pages": {
+          "type": "array",
+          "description": "Pages for this language.",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/definitions/page" },
+              { "$ref": "#/definitions/separator" },
+              { "$ref": "#/definitions/link" }
+            ]
+          }
+        },
+        "menu": {
+          "type": "array",
+          "description": "Menu items for this language.",
+          "items": {
+            "$ref": "#/definitions/menuItem"
+          }
+        },
+        "anchors": {
+          "type": "array",
+          "description": "Anchors for this language.",
+          "items": {
+            "$ref": "#/definitions/anchor"
+          }
+        }
+      },
+      "anyOf": [
+        { "required": ["href"] },
+        { "required": ["tabs"] },
+        { "required": ["dropdowns"] },
+        { "required": ["groups"] },
+        { "required": ["pages"] },
+        { "required": ["menu"] },
+        { "required": ["anchors"] }
+      ],
+      "additionalProperties": false
     }
   }
 }

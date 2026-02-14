@@ -7,8 +7,8 @@ const withMDX = createMDX({
 
 /** @type {import('next').NextConfig} */
 const config = {
-  reactStrictMode: true,
-  output: 'export',
+  reactStrictMode: false,
+  output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
   distDir: 'dist',
   devIndicators: false,
   turbopack: {

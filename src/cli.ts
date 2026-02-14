@@ -55,11 +55,17 @@ function init(targetDir: string) {
         {
           tab: "Getting Started",
           slug: "getting-started",
-          pages: ["quickstart", "installation"],
+          pages: [
+            "quickstart",
+            "installation",
+            { separator: "Resources" },
+            { label: "Velu Website", href: "https://getvelu.com" },
+          ],
           groups: [
             {
               group: "Guides",
               slug: "guides",
+              description: "Step-by-step guides to configure and deploy your docs.",
               pages: ["guides/configuration", "guides/deployment"],
             },
           ],
@@ -68,6 +74,13 @@ function init(targetDir: string) {
           tab: "API Reference",
           slug: "api-reference",
           pages: ["api-reference/overview", "api-reference/authentication"],
+        },
+      ],
+      anchors: [
+        {
+          anchor: "GitHub",
+          href: "https://github.com/aravindc26/velu",
+          icon: "Github",
         },
       ],
     },

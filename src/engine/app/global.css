@@ -7,6 +7,10 @@ body {
 }
 
 /* Ensure sidebar/toc widths are set on the grid layout */
+nextjs-portal {
+  display: none !important;
+}
+
 @media (min-width: 768px) {
   #nd-docs-layout[data-sidebar-collapsed='false'] {
     --fd-sidebar-width: 268px;
@@ -17,6 +21,235 @@ body {
   #nd-docs-layout {
     --fd-toc-width: 268px;
   }
+}
+
+.velu-sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+}
+
+.velu-sidebar-banner {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.125rem 0;
+}
+
+.velu-header-version-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.velu-version-switcher-wrap {
+  position: relative;
+}
+
+.velu-version-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.velu-version-switcher:hover {
+  color: var(--color-fd-foreground);
+  background-color: var(--color-fd-accent);
+}
+
+.velu-version-switcher svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.velu-version-switcher svg:last-child {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.velu-version-menu {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  min-width: 7.5rem;
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  background-color: var(--color-fd-popover);
+  border: 1px solid var(--color-fd-border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 60;
+}
+
+.velu-version-option {
+  display: block;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.velu-version-option:hover {
+  background-color: var(--color-fd-accent);
+  color: var(--color-fd-foreground);
+}
+
+.velu-version-option.active {
+  color: var(--color-fd-primary);
+}
+
+.velu-sidebar-footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.velu-sidebar-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.velu-sidebar-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  color: var(--color-fd-muted-foreground);
+  text-decoration: none;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.velu-sidebar-link:hover {
+  color: var(--color-fd-foreground);
+  background-color: var(--color-fd-accent);
+}
+
+.velu-sidebar-link-text {
+  flex: 1;
+}
+
+.velu-sidebar-link-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.velu-sidebar-link:hover .velu-sidebar-link-icon {
+  opacity: 0.8;
+}
+
+.velu-theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  background-color: var(--color-fd-accent);
+  width: fit-content;
+  margin-left: auto;
+}
+
+.velu-lang-switcher {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+  position: relative;
+}
+
+.velu-lang-switcher:hover {
+  color: var(--color-fd-foreground);
+  background-color: var(--color-fd-accent);
+}
+
+.velu-lang-switcher svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.velu-lang-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 0.25rem;
+  min-width: 8rem;
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  background-color: var(--color-fd-popover);
+  border: 1px solid var(--color-fd-border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 50;
+}
+
+.velu-lang-option {
+  display: block;
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.velu-lang-option:hover {
+  background-color: var(--color-fd-accent);
+  color: var(--color-fd-foreground);
+}
+
+.velu-lang-option.active {
+  color: var(--color-fd-primary);
+}
+
+.velu-theme-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.velu-theme-btn:hover {
+  color: var(--color-fd-foreground);
+}
+
+.velu-theme-btn.active {
+  background-color: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .velu-footer {

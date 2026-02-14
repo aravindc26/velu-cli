@@ -1,0 +1,491 @@
+interface NavSeparator {
+  separator: string;
+}
+
+interface NavLink {
+  href: string;
+  label: string;
+  icon?: string;
+}
+
+interface NavGroup {
+  group: string;
+  slug: string;
+  icon?: string;
+  tag?: string;
+  expanded?: boolean;
+  description?: string;
+  hidden?: boolean;
+  pages: NavEntry[];
+}
+
+interface NavTab {
+  tab: string;
+  slug: string;
+  icon?: string;
+  href?: string;
+  pages?: Array<string | NavSeparator | NavLink>;
+  groups?: NavGroup[];
+}
+
+type NavEntry = string | NavGroup | NavSeparator | NavLink;
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isSeparator(value: unknown): value is NavSeparator {
+  return isObject(value) && typeof value.separator === "string";
+}
+
+function isLink(value: unknown): value is NavLink {
+  return isObject(value) && typeof value.href === "string" && typeof value.label === "string";
+}
+
+function isGroupLike(value: unknown): value is Record<string, unknown> {
+  return isObject(value) && typeof value.group === "string";
+}
+
+function isMenuItem(value: unknown): value is Record<string, unknown> {
+  return isObject(value) && typeof value.item === "string";
+}
+
+function isTabLike(value: unknown): value is Record<string, unknown> {
+  return isObject(value) && typeof value.tab === "string";
+}
+
+function isAnchorLike(value: unknown): value is Record<string, unknown> {
+  return isObject(value) && typeof value.anchor === "string";
+}
+
+function isDropdownLike(value: unknown): value is Record<string, unknown> {
+  return isObject(value) && typeof value.dropdown === "string";
+}
+
+function isGroupEntry(value: NavEntry): value is NavGroup {
+  return typeof value === "object" && value !== null && "group" in value;
+}
+
+function slugify(input: string, fallback: string): string {
+  const slug = input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || fallback;
+}
+
+function uniqueSlug(base: string, used: Set<string>): string {
+  if (!used.has(base)) {
+    used.add(base);
+    return base;
+  }
+
+  let count = 2;
+  while (used.has(`${base}-${count}`)) count += 1;
+
+  const candidate = `${base}-${count}`;
+  used.add(candidate);
+  return candidate;
+}
+
+function isDocumentationSlug(input: string): boolean {
+  const value = input.trim().toLowerCase();
+  return value === "documentation" || value === "docs";
+}
+
+function normalizeLink(value: NavLink): NavLink {
+  const out: NavLink = { href: value.href, label: value.label };
+  if (typeof value.icon === "string" && value.icon.length > 0) out.icon = value.icon;
+  return out;
+}
+
+function normalizeAnchorLink(value: Record<string, unknown>): NavLink {
+  const href = typeof value.href === "string" ? value.href : "#";
+  const label = typeof value.anchor === "string" ? value.anchor : "Link";
+  const icon = typeof value.icon === "string" ? value.icon : undefined;
+  return icon ? { href, label, icon } : { href, label };
+}
+
+function hasContent(value: Record<string, unknown>): boolean {
+  const hasSimple =
+    (Array.isArray(value.pages) && value.pages.length > 0) ||
+    (Array.isArray(value.groups) && value.groups.length > 0) ||
+    (Array.isArray(value.menu) && value.menu.length > 0) ||
+    (Array.isArray(value.tabs) && value.tabs.length > 0) ||
+    (Array.isArray(value.dropdowns) && value.dropdowns.length > 0);
+
+  const hasAnchors =
+    Array.isArray(value.anchors) &&
+    value.anchors.some(
+      (a) =>
+        isAnchorLike(a) &&
+        ((Array.isArray(a.tabs) && a.tabs.length > 0) ||
+          (Array.isArray(a.groups) && a.groups.length > 0) ||
+          (Array.isArray(a.pages) && a.pages.length > 0) ||
+          (Array.isArray(a.menu) && a.menu.length > 0) ||
+          (Array.isArray(a.anchors) && a.anchors.length > 0) ||
+          (Array.isArray(a.dropdowns) && a.dropdowns.length > 0))
+    );
+
+  return hasSimple || hasAnchors;
+}
+
+function normalizeGroup(rawGroup: Record<string, unknown>, usedGroupSlugs: Set<string>): NavGroup {
+  const groupName = typeof rawGroup.group === "string" ? rawGroup.group : "Group";
+  const rawSlug = typeof rawGroup.slug === "string" ? rawGroup.slug : groupName;
+  const groupSlug = uniqueSlug(slugify(rawSlug, "group"), usedGroupSlugs);
+
+  const childUsedSlugs = new Set<string>();
+  const pages = collectEntries(rawGroup, childUsedSlugs);
+
+  const out: NavGroup = { group: groupName, slug: groupSlug, pages };
+  if (typeof rawGroup.icon === "string") out.icon = rawGroup.icon;
+  if (typeof rawGroup.tag === "string") out.tag = rawGroup.tag;
+  if (typeof rawGroup.expanded === "boolean") out.expanded = rawGroup.expanded;
+  if (typeof rawGroup.description === "string") out.description = rawGroup.description;
+  if (typeof rawGroup.hidden === "boolean") out.hidden = rawGroup.hidden;
+  return out;
+}
+
+function normalizeMenuItem(rawItem: Record<string, unknown>, usedGroupSlugs: Set<string>): NavGroup {
+  const name = typeof rawItem.item === "string" ? rawItem.item : "Menu";
+  const rawSlug = typeof rawItem.slug === "string" ? rawItem.slug : name;
+  const slug = uniqueSlug(slugify(rawSlug, "menu"), usedGroupSlugs);
+
+  const nestedGroupSlugs = new Set<string>();
+  const pages = collectEntries(rawItem, nestedGroupSlugs);
+  const out: NavGroup = { group: name, slug, pages };
+  if (typeof rawItem.icon === "string") out.icon = rawItem.icon;
+  return out;
+}
+
+function normalizeTabAsGroup(rawTab: Record<string, unknown>, usedGroupSlugs: Set<string>): NavGroup {
+  const tabName = typeof rawTab.tab === "string" ? rawTab.tab : "Tab";
+  const rawSlug = typeof rawTab.slug === "string" ? rawTab.slug : tabName;
+  const slug = uniqueSlug(slugify(rawSlug, "tab"), usedGroupSlugs);
+  const nestedGroupSlugs = new Set<string>();
+  const pages = collectEntries(rawTab, nestedGroupSlugs);
+
+  if (typeof rawTab.href === "string" && rawTab.href.length > 0 && !hasContent(rawTab)) {
+    pages.push({ href: rawTab.href, label: tabName, ...(typeof rawTab.icon === "string" ? { icon: rawTab.icon } : {}) });
+  }
+
+  const out: NavGroup = { group: tabName, slug, pages };
+  if (typeof rawTab.icon === "string") out.icon = rawTab.icon;
+  return out;
+}
+
+function normalizeDropdownAsGroup(rawDropdown: Record<string, unknown>, usedGroupSlugs: Set<string>): NavGroup {
+  return normalizeTabAsGroup(
+    {
+      tab: rawDropdown.dropdown,
+      slug: rawDropdown.slug,
+      icon: rawDropdown.icon,
+      href: rawDropdown.href,
+      groups: rawDropdown.groups,
+      pages: rawDropdown.pages,
+      menu: rawDropdown.menu,
+      anchors: rawDropdown.anchors,
+      dropdowns: rawDropdown.dropdowns,
+      tabs: rawDropdown.tabs,
+    },
+    usedGroupSlugs
+  );
+}
+
+function normalizeAnchorAsGroup(rawAnchor: Record<string, unknown>, usedGroupSlugs: Set<string>): NavGroup {
+  const anchorName = typeof rawAnchor.anchor === "string" ? rawAnchor.anchor : "Anchor";
+  const rawSlug = typeof rawAnchor.slug === "string" ? rawAnchor.slug : anchorName;
+  const slug = uniqueSlug(slugify(rawSlug, "anchor"), usedGroupSlugs);
+  const nestedGroupSlugs = new Set<string>();
+  const pages = collectEntries(rawAnchor, nestedGroupSlugs);
+
+  const out: NavGroup = { group: anchorName, slug, pages };
+  if (typeof rawAnchor.icon === "string") out.icon = rawAnchor.icon;
+  return out;
+}
+
+function collectEntries(rawSection: Record<string, unknown>, usedGroupSlugs: Set<string>): NavEntry[] {
+  const entries: NavEntry[] = [];
+
+  for (const item of Array.isArray(rawSection.menu) ? rawSection.menu : []) {
+    if (isMenuItem(item)) entries.push(normalizeMenuItem(item, usedGroupSlugs));
+  }
+
+  for (const group of Array.isArray(rawSection.groups) ? rawSection.groups : []) {
+    if (isGroupLike(group)) entries.push(normalizeGroup(group, usedGroupSlugs));
+  }
+
+  for (const item of Array.isArray(rawSection.pages) ? rawSection.pages : []) {
+    if (typeof item === "string") entries.push(item);
+    else if (isSeparator(item)) entries.push({ separator: item.separator });
+    else if (isLink(item)) entries.push(normalizeLink(item));
+    else if (isGroupLike(item)) entries.push(normalizeGroup(item, usedGroupSlugs));
+  }
+
+  for (const anchor of Array.isArray(rawSection.anchors) ? rawSection.anchors : []) {
+    if (!isAnchorLike(anchor)) continue;
+
+    const hrefOnly = typeof anchor.href === "string" && anchor.href.length > 0 && !hasContent(anchor);
+    if (hrefOnly) entries.push(normalizeAnchorLink(anchor));
+    else entries.push(normalizeAnchorAsGroup(anchor, usedGroupSlugs));
+  }
+
+  for (const dropdown of Array.isArray(rawSection.dropdowns) ? rawSection.dropdowns : []) {
+    if (isDropdownLike(dropdown)) entries.push(normalizeDropdownAsGroup(dropdown, usedGroupSlugs));
+  }
+
+  for (const tab of Array.isArray(rawSection.tabs) ? rawSection.tabs : []) {
+    if (isTabLike(tab)) entries.push(normalizeTabAsGroup(tab, usedGroupSlugs));
+  }
+
+  return entries;
+}
+
+function normalizeTab(rawTab: Record<string, unknown>, usedTabSlugs: Set<string>, slugPrefix: string): NavTab {
+  const tabName = typeof rawTab.tab === "string" ? rawTab.tab : "Tab";
+  const rawSlug = typeof rawTab.slug === "string" ? rawTab.slug : tabName;
+  const prefixedRawSlug = slugPrefix
+    ? (isDocumentationSlug(rawSlug) ? slugPrefix : `${slugPrefix}-${rawSlug}`)
+    : rawSlug;
+  const slug = uniqueSlug(slugify(prefixedRawSlug, "tab"), usedTabSlugs);
+
+  const out: NavTab = { tab: tabName, slug };
+  if (typeof rawTab.icon === "string") out.icon = rawTab.icon;
+
+  if (typeof rawTab.href === "string" && rawTab.href.length > 0 && !hasContent(rawTab)) {
+    out.href = rawTab.href;
+    return out;
+  }
+
+  const groupSlugSet = new Set<string>();
+  const entries = collectEntries(rawTab, groupSlugSet);
+  const groups: NavGroup[] = [];
+  const pages: Array<string | NavSeparator | NavLink> = [];
+
+  for (const entry of entries) {
+    if (isGroupEntry(entry)) groups.push(entry);
+    else pages.push(entry);
+  }
+
+  if (groups.length > 0) out.groups = groups;
+  if (pages.length > 0) out.pages = pages;
+  return out;
+}
+
+function normalizeDropdownToTab(rawDropdown: Record<string, unknown>, usedTabSlugs: Set<string>, slugPrefix: string): NavTab {
+  return normalizeTab(
+    {
+      tab: rawDropdown.dropdown,
+      slug: rawDropdown.slug,
+      icon: rawDropdown.icon,
+      href: rawDropdown.href,
+      groups: rawDropdown.groups,
+      pages: rawDropdown.pages,
+      menu: rawDropdown.menu,
+      anchors: rawDropdown.anchors,
+      dropdowns: rawDropdown.dropdowns,
+      tabs: rawDropdown.tabs,
+    },
+    usedTabSlugs,
+    slugPrefix
+  );
+}
+
+function normalizeTabList(rawTabs: unknown[], usedTabSlugs: Set<string>, slugPrefix = ""): NavTab[] {
+  const tabs: NavTab[] = [];
+  for (const item of rawTabs) {
+    if (isTabLike(item)) tabs.push(normalizeTab(item, usedTabSlugs, slugPrefix));
+  }
+  return tabs;
+}
+
+function normalizeDropdownList(rawDropdowns: unknown[], usedTabSlugs: Set<string>, slugPrefix = ""): NavTab[] {
+  const tabs: NavTab[] = [];
+  for (const item of rawDropdowns) {
+    if (isDropdownLike(item)) tabs.push(normalizeDropdownToTab(item, usedTabSlugs, slugPrefix));
+  }
+  return tabs;
+}
+
+function normalizeNavigationTabs(navigation: unknown, usedTabSlugs = new Set<string>()): NavTab[] {
+  if (!isObject(navigation)) return [];
+
+  const tabs: NavTab[] = [];
+
+  tabs.push(...normalizeTabList(Array.isArray(navigation.tabs) ? navigation.tabs : [], usedTabSlugs));
+  tabs.push(...normalizeDropdownList(Array.isArray(navigation.dropdowns) ? navigation.dropdowns : [], usedTabSlugs));
+
+  if (Array.isArray(navigation.products)) {
+    navigation.products.forEach((product, index) => {
+      if (!isObject(product)) return;
+      const productName = typeof product.product === "string" ? product.product : `Product ${index + 1}`;
+      const prefix = slugify(productName, `product-${index + 1}`);
+
+      tabs.push(...normalizeTabList(Array.isArray(product.tabs) ? product.tabs : [], usedTabSlugs, prefix));
+      tabs.push(...normalizeDropdownList(Array.isArray(product.dropdowns) ? product.dropdowns : [], usedTabSlugs, prefix));
+
+      if (!Array.isArray(product.tabs) && !Array.isArray(product.dropdowns)) {
+        if (hasContent(product)) {
+          tabs.push(
+            normalizeTab(
+              {
+                tab: productName,
+                slug: prefix,
+                icon: product.icon,
+                groups: product.groups,
+                pages: product.pages,
+                menu: product.menu,
+                anchors: product.anchors,
+                dropdowns: product.dropdowns,
+                tabs: product.tabs,
+              },
+              usedTabSlugs,
+              ""
+            )
+          );
+        } else if (typeof product.href === "string" && product.href.length > 0) {
+          tabs.push(
+            normalizeTab(
+              {
+                tab: productName,
+                slug: prefix,
+                icon: product.icon,
+                href: product.href,
+              },
+              usedTabSlugs,
+              ""
+            )
+          );
+        }
+      }
+    });
+  }
+
+  if (Array.isArray(navigation.versions)) {
+    navigation.versions.forEach((version, index) => {
+      if (!isObject(version)) return;
+      const versionName = typeof version.version === "string" ? version.version : `Version ${index + 1}`;
+      const prefix = slugify(versionName, `version-${index + 1}`);
+
+      tabs.push(...normalizeTabList(Array.isArray(version.tabs) ? version.tabs : [], usedTabSlugs, prefix));
+      tabs.push(...normalizeDropdownList(Array.isArray(version.dropdowns) ? version.dropdowns : [], usedTabSlugs, prefix));
+
+      if (!Array.isArray(version.tabs) && !Array.isArray(version.dropdowns)) {
+        if (hasContent(version)) {
+          tabs.push(
+            normalizeTab(
+              {
+                tab: versionName,
+                slug: prefix,
+                groups: version.groups,
+                pages: version.pages,
+                menu: version.menu,
+                anchors: version.anchors,
+                dropdowns: version.dropdowns,
+                tabs: version.tabs,
+              },
+              usedTabSlugs,
+              ""
+            )
+          );
+        } else if (typeof version.href === "string" && version.href.length > 0) {
+          tabs.push(
+            normalizeTab(
+              {
+                tab: versionName,
+                slug: prefix,
+                href: version.href,
+              },
+              usedTabSlugs,
+              ""
+            )
+          );
+        }
+      }
+    });
+  }
+
+  if (Array.isArray(navigation.anchors)) {
+    navigation.anchors.forEach((anchor, index) => {
+      if (!isAnchorLike(anchor)) return;
+
+      const anchorName = typeof anchor.anchor === "string" ? anchor.anchor : `Anchor ${index + 1}`;
+      const prefix = slugify(anchorName, `anchor-${index + 1}`);
+
+      if (Array.isArray(anchor.tabs)) {
+        tabs.push(...normalizeTabList(anchor.tabs, usedTabSlugs, prefix));
+      } else if (hasContent(anchor)) {
+        tabs.push(
+          normalizeTab(
+            {
+              tab: anchorName,
+              slug: prefix,
+              icon: anchor.icon,
+              groups: anchor.groups,
+              pages: anchor.pages,
+              menu: anchor.menu,
+              anchors: anchor.anchors,
+              dropdowns: anchor.dropdowns,
+              tabs: anchor.tabs,
+            },
+            usedTabSlugs,
+            ""
+          )
+        );
+      }
+    });
+  }
+
+  const hasRootGroups = Array.isArray(navigation.groups) && navigation.groups.length > 0;
+  const hasRootPages = Array.isArray(navigation.pages) && navigation.pages.length > 0;
+  const hasRootMenu = Array.isArray(navigation.menu) && navigation.menu.length > 0;
+
+  if (tabs.length === 0 && (hasRootGroups || hasRootPages || hasRootMenu)) {
+    tabs.push(
+      normalizeTab(
+        {
+          tab: "Documentation",
+          slug: "documentation",
+          groups: navigation.groups,
+          pages: navigation.pages,
+          menu: navigation.menu,
+          anchors: navigation.anchors,
+          dropdowns: navigation.dropdowns,
+          tabs: navigation.tabs,
+        },
+        usedTabSlugs,
+        ""
+      )
+    );
+  }
+
+  return tabs;
+}
+
+function normalizeLanguageEntries(languages: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(languages)) return [];
+
+  return languages
+    .filter(isObject)
+    .map((entry) => {
+      const usedTabSlugs = new Set<string>();
+      return {
+        ...entry,
+        tabs: normalizeNavigationTabs(entry, usedTabSlugs),
+      };
+    });
+}
+
+export function normalizeConfigNavigation<T extends { navigation?: unknown }>(config: T): T {
+  const nav = isObject(config.navigation) ? config.navigation : {};
+  return {
+    ...config,
+    navigation: {
+      ...nav,
+      tabs: normalizeNavigationTabs(nav),
+      languages: normalizeLanguageEntries(nav.languages),
+    },
+  } as T;
+}

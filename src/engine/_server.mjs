@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { watch } from 'node:fs';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
+import { normalizeConfigNavigation } from './lib/navigation-normalize.mjs';
 
 const require = createRequire(import.meta.url);
 const nextBinPath = require.resolve('next/dist/bin/next');
@@ -13,7 +14,7 @@ const contentDir = resolve('content', 'docs');
 
 function loadConfig() {
   const raw = readFileSync(join(docsDir, 'velu.json'), 'utf-8');
-  return JSON.parse(raw);
+  return normalizeConfigNavigation(JSON.parse(raw));
 }
 
 function pageBasename(page) {
@@ -23,6 +24,29 @@ function pageBasename(page) {
 function pageLabelFromSlug(slug) {
   const last = slug.split('/').pop() || slug;
   return last.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function isSeparator(item) {
+  return typeof item === 'object' && item !== null && 'separator' in item;
+}
+
+function isLink(item) {
+  return typeof item === 'object' && item !== null && 'href' in item && 'label' in item;
+}
+
+function isGroup(item) {
+  return typeof item === 'object' && item !== null && 'group' in item;
+}
+
+function metaEntry(item) {
+  if (typeof item === 'string') return item;
+  if (isSeparator(item)) return `---${item.separator}---`;
+  if (isLink(item)) {
+    return item.icon
+      ? `[${item.icon}][${item.label}](${item.href})`
+      : `[${item.label}](${item.href})`;
+  }
+  return String(item);
 }
 
 function buildArtifacts(config) {
@@ -51,9 +75,17 @@ function buildArtifacts(config) {
         pageMap.push({ src: item, dest });
         pages.push(basename);
         trackFirstPage(dest);
-      } else {
+      } else if (isGroup(item)) {
         addGroup(item, groupDir);
-        pages.push(item.slug);
+        pages.push(item.hidden ? `!${item.slug}` : item.slug);
+      } else if (isSeparator(item)) {
+        pages.push(`---${item.separator}---`);
+      } else if (isLink(item)) {
+        pages.push(
+          item.icon
+            ? `[${item.icon}][${item.label}](${item.href})`
+            : `[${item.label}](${item.href})`
+        );
       }
     }
 
@@ -64,6 +96,7 @@ function buildArtifacts(config) {
     };
 
     if (group.icon) groupMeta.icon = group.icon;
+    if (group.description) groupMeta.description = group.description;
 
     metaFiles.push({ dir: groupDir, data: groupMeta });
   }
@@ -73,15 +106,19 @@ function buildArtifacts(config) {
 
     for (const group of tab.groups || []) {
       addGroup(group, tab.slug);
-      tabPages.push(group.slug);
+      tabPages.push(group.hidden ? `!${group.slug}` : group.slug);
     }
 
-    for (const page of tab.pages || []) {
-      const basename = pageBasename(page);
-      const dest = `${tab.slug}/${basename}`;
-      pageMap.push({ src: page, dest });
-      tabPages.push(basename);
-      trackFirstPage(dest);
+    for (const item of tab.pages || []) {
+      if (typeof item === 'string') {
+        const basename = pageBasename(item);
+        const dest = `${tab.slug}/${basename}`;
+        pageMap.push({ src: item, dest });
+        tabPages.push(basename);
+        trackFirstPage(dest);
+      } else {
+        tabPages.push(metaEntry(item));
+      }
     }
 
     const tabMeta = {
@@ -133,23 +170,95 @@ function writeIndexPage(firstPage) {
   );
 }
 
+function writeLangContent(langCode, artifacts, isDefault, useLangFolders = false) {
+  const storagePrefix = useLangFolders ? langCode : (isDefault ? '' : langCode);
+  const urlPrefix = isDefault ? '' : langCode;
+
+  // Write meta files (prefixed for non-default)
+  const metaFiles = storagePrefix
+    ? artifacts.metaFiles.map((meta) => ({
+        dir: meta.dir ? `${storagePrefix}/${meta.dir}` : storagePrefix,
+        data: { ...meta.data },
+      }))
+    : artifacts.metaFiles;
+  writeMetaFiles(metaFiles);
+
+  // Copy pages using explicit source paths from velu.json
+  for (const { src, dest } of artifacts.pageMap) {
+    const srcPath = join(docsDir, `${src}.md`);
+    if (!existsSync(srcPath)) {
+      console.warn(`  \x1b[33m⚠\x1b[0m  Missing page source: ${src}.md (language: ${langCode})`);
+      continue;
+    }
+    const destPath = join(contentDir, storagePrefix ? `${storagePrefix}/${dest}.mdx` : `${dest}.mdx`);
+    processPage(srcPath, destPath, src);
+  }
+
+  // Index page
+  const href = urlPrefix ? `/${urlPrefix}/${artifacts.firstPage}/` : `/${artifacts.firstPage}/`;
+  const indexPath = storagePrefix ? join(contentDir, storagePrefix, 'index.mdx') : join(contentDir, 'index.mdx');
+  writeFileSync(
+    indexPath,
+    `---\ntitle: "Overview"\ndescription: Documentation powered by Velu\n---\n\nimport { Card, Cards } from "fumadocs-ui/components/card"\nimport { Callout } from "fumadocs-ui/components/callout"\n\n<Callout type="info">\n  Welcome to your documentation site.\n</Callout>\n\n## Start here\n\n<Cards>\n  <Card\n    title="Read the docs"\n    href="${href}"\n    description="Begin with the first page in your configured navigation."\n  />\n</Cards>\n`,
+    'utf-8'
+  );
+}
+
 function rebuildFromConfig() {
   const config = loadConfig();
-  const artifacts = buildArtifacts(config);
+  const navLanguages = config.navigation?.languages;
+  const simpleLanguages = config.languages || [];
 
   rmSync(contentDir, { recursive: true, force: true });
   mkdirSync(contentDir, { recursive: true });
 
-  writeMetaFiles(artifacts.metaFiles);
+  // ── Mode 1: Per-language navigation (Mintlify-style) ──────────────
+  if (navLanguages && navLanguages.length > 0) {
+    const rootPages = [];
 
-  for (const { src, dest } of artifacts.pageMap) {
-    const srcPath = join(docsDir, `${src}.md`);
-    if (!existsSync(srcPath)) continue;
-    const destPath = join(contentDir, `${dest}.mdx`);
-    processPage(srcPath, destPath, src);
+    for (let i = 0; i < navLanguages.length; i++) {
+      const langEntry = navLanguages[i];
+      const langCode = langEntry.language;
+      const isDefault = i === 0;
+
+      // Build artifacts using this language's own tabs
+      const langConfig = { ...config, navigation: { ...config.navigation, tabs: langEntry.tabs } };
+      const artifacts = buildArtifacts(langConfig);
+
+      writeLangContent(langCode, artifacts, isDefault, true);
+      rootPages.push(`!${langCode}`);
+    }
+
+    // Write root meta with default tabs + hidden language folders
+    writeFileSync(
+      join(contentDir, 'meta.json'),
+      JSON.stringify({ pages: rootPages }, null, 2) + '\n',
+      'utf-8'
+    );
+
+    // Return the default language's page map for file watching
+    const defaultConfig = { ...config, navigation: { ...config.navigation, tabs: navLanguages[0].tabs } };
+    return buildArtifacts(defaultConfig).pageMap;
   }
 
-  writeIndexPage(artifacts.firstPage);
+  // ── Mode 2: Simple multi-lang (same nav, content in docs/<lang>/) ─
+  const artifacts = buildArtifacts(config);
+
+  const useLangFolders = simpleLanguages.length > 1;
+  writeLangContent(simpleLanguages[0] || 'en', artifacts, true, useLangFolders);
+
+  if (simpleLanguages.length > 1) {
+    const rootMetaPath = join(contentDir, 'meta.json');
+    const rootPages = [`!${simpleLanguages[0] || 'en'}`];
+
+    for (const lang of simpleLanguages.slice(1)) {
+      writeLangContent(lang, artifacts, false, true);
+      rootPages.push(`!${lang}`);
+    }
+
+    writeFileSync(rootMetaPath, JSON.stringify({ pages: rootPages }, null, 2) + '\n', 'utf-8');
+  }
+
   return artifacts.pageMap;
 }
 

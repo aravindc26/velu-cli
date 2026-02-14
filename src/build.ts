@@ -2,20 +2,60 @@ import { readFileSync, writeFileSync, mkdirSync, copyFileSync, cpSync, existsSyn
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateThemeCss, resolveThemeName, type VeluColors, type VeluStyling } from "./themes.js";
+import { normalizeConfigNavigation } from "./navigation-normalize.js";
 
 // ── Engine directory (shipped with the CLI package) ──────────────────────────
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const ENGINE_DIR = join(__dirname, "engine");
+const PACKAGED_ENGINE_DIR = join(__dirname, "engine");
+const DEV_ENGINE_DIR = join(__dirname, "..", "src", "engine");
+const ENGINE_DIR = existsSync(DEV_ENGINE_DIR) ? DEV_ENGINE_DIR : PACKAGED_ENGINE_DIR;
 
 // ── Types (used only by build.ts for page copying) ─────────────────────────────
+
+interface VeluSeparator {
+  separator: string;
+}
+
+interface VeluLink {
+  href: string;
+  label: string;
+  icon?: string;
+}
+
+interface VeluAnchor {
+  anchor: string;
+  href?: string;
+  icon?: string;
+  color?: {
+    light: string;
+    dark: string;
+  };
+  tabs?: VeluTab[];
+  hidden?: boolean;
+}
+
+interface VeluGlobalTab {
+  tab: string;
+  href: string;
+  icon?: string;
+}
 
 interface VeluGroup {
   group: string;
   slug: string;
   icon?: string;
   expanded?: boolean;
-  pages: (string | VeluGroup)[];
+  description?: string;
+  hidden?: boolean;
+  pages: (string | VeluGroup | VeluSeparator | VeluLink)[];
+}
+
+interface VeluMenuItem {
+  item: string;
+  icon?: string;
+  groups?: VeluGroup[];
+  pages?: (string | VeluSeparator | VeluLink)[];
 }
 
 interface VeluTab {
@@ -23,8 +63,26 @@ interface VeluTab {
   slug: string;
   icon?: string;
   href?: string;
-  pages?: string[];
+  pages?: (string | VeluSeparator | VeluLink)[];
   groups?: VeluGroup[];
+  menu?: VeluMenuItem[];
+}
+
+interface VeluLanguageNav {
+  language: string;
+  tabs: VeluTab[];
+}
+
+interface VeluProductNav {
+  product: string;
+  icon?: string;
+  tabs?: VeluTab[];
+  pages?: (string | VeluSeparator | VeluLink)[];
+}
+
+interface VeluVersionNav {
+  version: string;
+  tabs: VeluTab[];
 }
 
 interface VeluConfig {
@@ -33,16 +91,38 @@ interface VeluConfig {
   colors?: VeluColors;
   appearance?: "system" | "light" | "dark";
   styling?: VeluStyling;
+  languages?: string[];
   navigation: {
-    tabs: VeluTab[];
+    tabs?: VeluTab[];
+    languages?: VeluLanguageNav[];
+    products?: VeluProductNav[];
+    versions?: VeluVersionNav[];
+    anchors?: VeluAnchor[];
+    global?: {
+      anchors?: VeluAnchor[];
+      tabs?: VeluGlobalTab[];
+    };
   };
+}
+
+function isSeparator(item: unknown): item is VeluSeparator {
+  return typeof item === "object" && item !== null && "separator" in item;
+}
+
+function isLink(item: unknown): item is VeluLink {
+  return typeof item === "object" && item !== null && "href" in item && "label" in item;
+}
+
+function isGroup(item: unknown): item is VeluGroup {
+  return typeof item === "object" && item !== null && "group" in item;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function loadConfig(docsDir: string): VeluConfig {
   const raw = readFileSync(join(docsDir, "velu.json"), "utf-8");
-  return JSON.parse(raw);
+  const parsed = JSON.parse(raw) as VeluConfig;
+  return normalizeConfigNavigation(parsed);
 }
 
 function pageLabelFromSlug(slug: string): string {
@@ -73,7 +153,7 @@ interface BuildArtifacts {
 function buildArtifacts(config: VeluConfig): BuildArtifacts {
   const pageMap: PageMapping[] = [];
   const metaFiles: MetaFile[] = [];
-  const rootTabs = config.navigation.tabs.filter((tab) => !tab.href);
+  const rootTabs = (config.navigation.tabs || []).filter((tab) => !tab.href);
   const rootPages = rootTabs.map((tab) => tab.slug);
   let firstPage = "quickstart";
   let hasFirstPage = false;
@@ -83,6 +163,17 @@ function buildArtifacts(config: VeluConfig): BuildArtifacts {
       firstPage = dest;
       hasFirstPage = true;
     }
+  }
+
+  function metaEntry(item: string | VeluSeparator | VeluLink): string {
+    if (typeof item === "string") return item;
+    if (isSeparator(item)) return `---${item.separator}---`;
+    if (isLink(item)) {
+      return item.icon
+        ? `[${item.icon}][${item.label}](${item.href})`
+        : `[${item.label}](${item.href})`;
+    }
+    return String(item);
   }
 
   function addGroup(group: VeluGroup, parentDir: string) {
@@ -96,9 +187,17 @@ function buildArtifacts(config: VeluConfig): BuildArtifacts {
         pageMap.push({ src: item, dest });
         pages.push(basename);
         trackFirstPage(dest);
-      } else {
+      } else if (isGroup(item)) {
         addGroup(item, groupDir);
-        pages.push(item.slug);
+        pages.push(item.hidden ? `!${item.slug}` : item.slug);
+      } else if (isSeparator(item)) {
+        pages.push(`---${item.separator}---`);
+      } else if (isLink(item)) {
+        pages.push(
+          item.icon
+            ? `[${item.icon}][${item.label}](${item.href})`
+            : `[${item.label}](${item.href})`
+        );
       }
     }
 
@@ -109,6 +208,7 @@ function buildArtifacts(config: VeluConfig): BuildArtifacts {
     };
 
     if (group.icon) groupMeta.icon = group.icon;
+    if (group.description) groupMeta.description = group.description;
 
     metaFiles.push({ dir: groupDir, data: groupMeta });
   }
@@ -119,17 +219,21 @@ function buildArtifacts(config: VeluConfig): BuildArtifacts {
     if (tab.groups) {
       for (const group of tab.groups) {
         addGroup(group, tab.slug);
-        tabPages.push(group.slug);
+        tabPages.push(group.hidden ? `!${group.slug}` : group.slug);
       }
     }
 
     if (tab.pages) {
-      for (const page of tab.pages) {
-        const basename = pageBasename(page);
-        const dest = `${tab.slug}/${basename}`;
-        pageMap.push({ src: page, dest });
-        tabPages.push(basename);
-        trackFirstPage(dest);
+      for (const item of tab.pages) {
+        if (typeof item === "string") {
+          const basename = pageBasename(item);
+          const dest = `${tab.slug}/${basename}`;
+          pageMap.push({ src: item, dest });
+          tabPages.push(basename);
+          trackFirstPage(dest);
+        } else {
+          tabPages.push(metaEntry(item));
+        }
       }
     }
 
@@ -176,40 +280,106 @@ function build(docsDir: string, outDir: string) {
   console.log("📋 Copied velu.json");
 
   // ── 4. Build content + metadata artifacts ────────────────────────────────
-  const { pageMap, metaFiles, firstPage } = buildArtifacts(config);
+  const contentDir = join(outDir, "content", "docs");
+  const navLanguages = config.navigation.languages;
+  const simpleLanguages = config.languages || [];
 
-  // 4a) Write folder meta.json files (tabs/groups ordering & labels)
-  for (const meta of metaFiles) {
-    const metaPath = join(outDir, "content", "docs", meta.dir, "meta.json");
-    mkdirSync(dirname(metaPath), { recursive: true });
-    writeFileSync(metaPath, JSON.stringify(meta.data, null, 2) + "\n", "utf-8");
-  }
-
-  // 4b) Copy all referenced .md files (slug-based destinations)
-  for (const { src, dest } of pageMap) {
-    const srcPath = join(docsDir, `${src}.md`);
-    const destPath = join(outDir, "content", "docs", `${dest}.mdx`);
-
-    if (!existsSync(srcPath)) {
-      console.warn(`⚠️  Missing: ${srcPath}`);
-      continue;
-    }
-
+  function processPage(srcPath: string, destPath: string, slug: string) {
     mkdirSync(dirname(destPath), { recursive: true });
-
     let content = readFileSync(srcPath, "utf-8");
     if (!content.startsWith("---")) {
       const titleMatch = content.match(/^#\s+(.+)$/m);
-      const title = titleMatch ? titleMatch[1] : pageLabelFromSlug(src);
+      const title = titleMatch ? titleMatch[1] : pageLabelFromSlug(slug);
       if (titleMatch) {
         content = content.replace(/^#\s+.+$/m, "").trimStart();
       }
       content = `---\ntitle: "${title}"\n---\n\n${content}`;
     }
-
     writeFileSync(destPath, content, "utf-8");
   }
-  console.log(`📄 Generated ${pageMap.length} pages + ${metaFiles.length} navigation meta files`);
+
+  function writeLangContent(
+    langCode: string,
+    artifacts: BuildArtifacts,
+    isDefault: boolean,
+    useLangFolders = false
+  ) {
+    const storagePrefix = useLangFolders ? langCode : (isDefault ? "" : langCode);
+    const urlPrefix = isDefault ? "" : langCode;
+
+    // Write meta files
+    const metas = storagePrefix
+      ? artifacts.metaFiles.map((m) => ({ dir: m.dir ? `${storagePrefix}/${m.dir}` : storagePrefix, data: { ...m.data } }))
+      : artifacts.metaFiles;
+    for (const meta of metas) {
+      const metaPath = join(contentDir, meta.dir, "meta.json");
+      mkdirSync(dirname(metaPath), { recursive: true });
+      writeFileSync(metaPath, JSON.stringify(meta.data, null, 2) + "\n", "utf-8");
+    }
+
+    // Copy pages using explicit source paths from velu.json
+    for (const { src, dest } of artifacts.pageMap) {
+      const srcPath = join(docsDir, `${src}.md`);
+      if (!existsSync(srcPath)) {
+        console.warn(`⚠️  Missing page source: ${src}.md (language: ${langCode})`);
+        continue;
+      }
+      const destPath = join(contentDir, storagePrefix ? `${storagePrefix}/${dest}.mdx` : `${dest}.mdx`);
+      processPage(srcPath, destPath, src);
+    }
+
+    // Index page
+    const href = urlPrefix ? `/${urlPrefix}/${artifacts.firstPage}/` : `/${artifacts.firstPage}/`;
+    const indexPath = storagePrefix ? join(contentDir, storagePrefix, "index.mdx") : join(contentDir, "index.mdx");
+    writeFileSync(
+      indexPath,
+      `---\ntitle: "Overview"\ndescription: Documentation powered by Velu\n---\n\nimport { Card, Cards } from "fumadocs-ui/components/card"\nimport { Callout } from "fumadocs-ui/components/callout"\n\n<Callout type="info">\n  Welcome to your documentation site.\n</Callout>\n\n## Start here\n\n<Cards>\n  <Card\n    title="Read the docs"\n    href="${href}"\n    description="Begin with the first page in your configured navigation."\n  />\n</Cards>\n`,
+      "utf-8"
+    );
+  }
+
+  let totalPages = 0;
+  let totalMeta = 0;
+
+  if (navLanguages && navLanguages.length > 0) {
+    // ── Mode 1: Per-language navigation (Mintlify-style) ──────────────
+    const rootPages: string[] = [];
+
+    for (let i = 0; i < navLanguages.length; i++) {
+      const langEntry = navLanguages[i];
+      const isDefault = i === 0;
+      const langConfig = { ...config, navigation: { ...config.navigation, tabs: langEntry.tabs } } as VeluConfig;
+      const artifacts = buildArtifacts(langConfig);
+      writeLangContent(langEntry.language, artifacts, isDefault, true);
+      totalPages += artifacts.pageMap.length;
+      totalMeta += artifacts.metaFiles.length;
+      rootPages.push(`!${langEntry.language}`);
+    }
+
+    const rootMetaPath = join(contentDir, "meta.json");
+    writeFileSync(rootMetaPath, JSON.stringify({ pages: rootPages }, null, 2) + "\n", "utf-8");
+  } else {
+    // ── Mode 2: Simple (single-lang or same-nav multi-lang) ───────────
+    const artifacts = buildArtifacts(config);
+    const useLangFolders = simpleLanguages.length > 1;
+    writeLangContent(simpleLanguages[0] || "en", artifacts, true, useLangFolders);
+    totalPages += artifacts.pageMap.length;
+    totalMeta += artifacts.metaFiles.length;
+
+    if (simpleLanguages.length > 1) {
+      const rootMetaPath = join(contentDir, "meta.json");
+      const rootPages = [`!${simpleLanguages[0] || "en"}`];
+      for (const lang of simpleLanguages.slice(1)) {
+        writeLangContent(lang, artifacts, false, true);
+        rootPages.push(`!${lang}`);
+        totalPages += artifacts.pageMap.length;
+        totalMeta += artifacts.metaFiles.length;
+      }
+      writeFileSync(rootMetaPath, JSON.stringify({ pages: rootPages }, null, 2) + "\n", "utf-8");
+    }
+  }
+
+  console.log(`📄 Generated ${totalPages} pages + ${totalMeta} navigation meta files`);
 
   // ── 5. Generate theme CSS (dynamic — depends on user config) ─────────────
   const themeCss = generateThemeCss({
@@ -221,12 +391,6 @@ function build(docsDir: string, outDir: string) {
   writeFileSync(join(outDir, "app", "velu-theme.css"), themeCss, "utf-8");
   console.log(`🎨 Generated theme: ${resolveThemeName(config.theme)}`);
 
-  // ── 6. Generate index.mdx (dynamic — references first page) ──────────────
-  writeFileSync(
-    join(outDir, "content", "docs", "index.mdx"),
-    `---\ntitle: "Overview"\ndescription: Documentation powered by Velu\n---\n\nimport { Card, Cards } from "fumadocs-ui/components/card"\nimport { Callout } from "fumadocs-ui/components/callout"\n\n<Callout type="info">\n  Welcome to your documentation site.\n</Callout>\n\n## Start here\n\n<Cards>\n  <Card\n    title="Read the docs"\n    href="/${firstPage}/"\n    description="Begin with the first page in your configured navigation."\n  />\n</Cards>\n`,
-    "utf-8"
-  );
 
   // ── 7. Generate minimal package.json (type: module, no local deps) ───────
   const sitePkg = {

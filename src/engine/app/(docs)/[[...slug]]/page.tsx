@@ -9,6 +9,7 @@ import {
 } from 'fumadocs-ui/layouts/docs/page';
 import { getMDXComponents } from '@/mdx-components';
 import { source } from '@/lib/source';
+import { getLanguages } from '@/lib/velu';
 import { CopyPageButton } from '@/components/copy-page';
 
 interface RouteParams {
@@ -19,9 +20,26 @@ interface PageProps {
   params: Promise<RouteParams>;
 }
 
+function resolveLocaleSlug(slugInput: string[] | undefined) {
+  const languages = getLanguages();
+  const defaultLanguage = languages[0] ?? 'en';
+  const slug = slugInput ?? [];
+  const firstSeg = slug[0];
+  const hasLocalePrefix = languages.includes(firstSeg ?? '');
+
+  return {
+    defaultLanguage,
+    locale: hasLocalePrefix ? firstSeg! : defaultLanguage,
+    pageSlug: hasLocalePrefix ? slug.slice(1) : slug,
+  };
+}
+
 export default async function Page({ params }: PageProps) {
   const resolvedParams = await params;
-  const page = source.getPage(resolvedParams.slug);
+  const { locale, pageSlug } = resolveLocaleSlug(resolvedParams.slug);
+  const hasI18n = getLanguages().length > 1;
+
+  const page = hasI18n ? source.getPage(pageSlug, locale) : source.getPage(pageSlug);
 
   if (!page) notFound();
 
@@ -51,14 +69,28 @@ export default async function Page({ params }: PageProps) {
 }
 
 export async function generateStaticParams() {
-  const params = source.generateParams();
-  // Include root path for the optional catch-all [[...slug]]
-  return [{ slug: [] }, ...params];
+  const generated = source.generateParams('slug') as Array<{ slug?: string[] }>;
+  const seen = new Set<string>();
+
+  const nonRoot = generated.filter((entry) => {
+    const slug = entry.slug ?? [];
+    if (slug.length === 0) return false;
+    const key = slug.join('/');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Include root variants for optional catch-all [[...slug]] in export mode.
+  return [{}, { slug: undefined }, { slug: [] }, ...nonRoot];
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const resolvedParams = await params;
-  const page = source.getPage(resolvedParams.slug);
+  const { locale, pageSlug } = resolveLocaleSlug(resolvedParams.slug);
+  const hasI18n = getLanguages().length > 1;
+
+  const page = hasI18n ? source.getPage(pageSlug, locale) : source.getPage(pageSlug);
 
   if (!page) notFound();
 

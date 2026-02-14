@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
-import { RootProvider } from 'fumadocs-ui/provider/next';
 import { getAppearance } from '@/lib/velu';
-import { PagefindSearch } from '@/components/search';
+import { Providers } from '@/components/providers';
 import { VeluAssistant } from '@/components/assistant';
 import './global.css';
 import './search.css';
@@ -21,13 +20,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen" suppressHydrationWarning>
-        <RootProvider
-          theme={theme}
-          search={{ SearchDialog: PagefindSearch }}
-        >
+        <Providers theme={theme}>
           {children}
           <VeluAssistant />
-        </RootProvider>
+        </Providers>
       </body>
     </html>
   );
