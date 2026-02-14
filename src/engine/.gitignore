@@ -1,3 +1,4 @@
-.astro/
+.next/
+.source/
 node_modules/
-dist/
+out/

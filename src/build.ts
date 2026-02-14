@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, cpSync, existsSync, rmSync } from "node:fs";
-import { resolve, join, dirname } from "node:path";
+import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { generateThemeCss, type ThemeConfig, type VeluColors, type VeluStyling } from "./themes.js";
+import { generateThemeCss, resolveThemeName, type VeluColors, type VeluStyling } from "./themes.js";
 
 // ── Engine directory (shipped with the CLI package) ──────────────────────────
 const __filename = fileURLToPath(import.meta.url);
@@ -13,12 +13,15 @@ const ENGINE_DIR = join(__dirname, "engine");
 interface VeluGroup {
   group: string;
   slug: string;
+  icon?: string;
+  expanded?: boolean;
   pages: (string | VeluGroup)[];
 }
 
 interface VeluTab {
   tab: string;
   slug: string;
+  icon?: string;
   href?: string;
   pages?: string[];
   groups?: VeluGroup[];
@@ -51,54 +54,101 @@ function pageBasename(page: string): string {
   return page.split("/").pop()!;
 }
 
-function collectPagesFromGroup(group: VeluGroup): string[] {
-  const pages: string[] = [];
-  for (const item of group.pages) {
-    if (typeof item === "string") pages.push(item);
-    else pages.push(...collectPagesFromGroup(item));
-  }
-  return pages;
-}
-
 interface PageMapping {
   src: string;   // original page reference (file path without .md)
-  dest: string;  // slug-based destination path (slug/basename)
+  dest: string;  // destination path under content/docs (without extension)
 }
 
-function buildPageMap(config: VeluConfig): PageMapping[] {
-  const mappings: PageMapping[] = [];
+interface MetaFile {
+  dir: string;
+  data: Record<string, unknown>;
+}
 
-  function addPagesFromGroup(group: VeluGroup, tabSlug: string) {
+interface BuildArtifacts {
+  pageMap: PageMapping[];
+  metaFiles: MetaFile[];
+  firstPage: string;
+}
+
+function buildArtifacts(config: VeluConfig): BuildArtifacts {
+  const pageMap: PageMapping[] = [];
+  const metaFiles: MetaFile[] = [];
+  const rootTabs = config.navigation.tabs.filter((tab) => !tab.href);
+  const rootPages = rootTabs.map((tab) => tab.slug);
+  let firstPage = "quickstart";
+  let hasFirstPage = false;
+
+  function trackFirstPage(dest: string) {
+    if (!hasFirstPage) {
+      firstPage = dest;
+      hasFirstPage = true;
+    }
+  }
+
+  function addGroup(group: VeluGroup, parentDir: string) {
+    const groupDir = `${parentDir}/${group.slug}`;
+    const pages: string[] = [];
+
     for (const item of group.pages) {
       if (typeof item === "string") {
-        mappings.push({ src: item, dest: `${tabSlug}/${group.slug}/${pageBasename(item)}` });
+        const basename = pageBasename(item);
+        const dest = `${groupDir}/${basename}`;
+        pageMap.push({ src: item, dest });
+        pages.push(basename);
+        trackFirstPage(dest);
       } else {
-        addPagesFromGroup(item, tabSlug);
+        addGroup(item, groupDir);
+        pages.push(item.slug);
       }
     }
+
+    const groupMeta: Record<string, unknown> = {
+      title: group.group,
+      pages,
+      defaultOpen: group.expanded !== false,
+    };
+
+    if (group.icon) groupMeta.icon = group.icon;
+
+    metaFiles.push({ dir: groupDir, data: groupMeta });
   }
 
-  for (const tab of config.navigation.tabs) {
-    if (tab.href) continue;
-    // Direct pages in tab use tab slug
-    if (tab.pages) {
-      for (const page of tab.pages) {
-        mappings.push({ src: page, dest: `${tab.slug}/${pageBasename(page)}` });
-      }
-    }
-    // Groups inside tab: <tab-slug>/<group-slug>/<page-basename>
+  for (const tab of rootTabs) {
+    const tabPages: string[] = [];
+
     if (tab.groups) {
       for (const group of tab.groups) {
-        addPagesFromGroup(group, tab.slug);
+        addGroup(group, tab.slug);
+        tabPages.push(group.slug);
       }
     }
+
+    if (tab.pages) {
+      for (const page of tab.pages) {
+        const basename = pageBasename(page);
+        const dest = `${tab.slug}/${basename}`;
+        pageMap.push({ src: page, dest });
+        tabPages.push(basename);
+        trackFirstPage(dest);
+      }
+    }
+
+    const tabMeta: Record<string, unknown> = {
+      title: tab.tab,
+      root: true,
+      pages: tabPages,
+    };
+
+    if (tab.icon) tabMeta.icon = tab.icon;
+
+    metaFiles.push({ dir: tab.slug, data: tabMeta });
   }
 
-  return mappings;
-}
+  if (rootPages.length > 0) {
+    metaFiles.push({ dir: "", data: { pages: rootPages } });
+  }
 
-function collectAllPages(config: VeluConfig): string[] {
-  return buildPageMap(config).map(m => m.src);
+  return { pageMap, metaFiles, firstPage };
 }
 
 // ── Build ──────────────────────────────────────────────────────────────────────
@@ -113,21 +163,32 @@ function build(docsDir: string, outDir: string) {
 
   // ── 1. Copy engine static files ──────────────────────────────────────────
   cpSync(ENGINE_DIR, outDir, { recursive: true });
+  // Remove legacy Astro template leftovers if present in the packaged engine.
+  rmSync(join(outDir, "src"), { recursive: true, force: true });
   console.log("📦 Copied engine files");
 
   // ── 2. Create additional directories ─────────────────────────────────────
-  mkdirSync(join(outDir, "src", "content", "docs"), { recursive: true });
+  mkdirSync(join(outDir, "content", "docs"), { recursive: true });
   mkdirSync(join(outDir, "public"), { recursive: true });
 
-  // ── 3. Copy velu.json into the Astro project ─────────────────────────────
+  // ── 3. Copy velu.json into the generated project ─────────────────────────
   copyFileSync(join(docsDir, "velu.json"), join(outDir, "velu.json"));
   console.log("📋 Copied velu.json");
 
-  // ── 4. Copy all referenced .md files (slug-based destinations) ───────────
-  const pageMap = buildPageMap(config);
+  // ── 4. Build content + metadata artifacts ────────────────────────────────
+  const { pageMap, metaFiles, firstPage } = buildArtifacts(config);
+
+  // 4a) Write folder meta.json files (tabs/groups ordering & labels)
+  for (const meta of metaFiles) {
+    const metaPath = join(outDir, "content", "docs", meta.dir, "meta.json");
+    mkdirSync(dirname(metaPath), { recursive: true });
+    writeFileSync(metaPath, JSON.stringify(meta.data, null, 2) + "\n", "utf-8");
+  }
+
+  // 4b) Copy all referenced .md files (slug-based destinations)
   for (const { src, dest } of pageMap) {
     const srcPath = join(docsDir, `${src}.md`);
-    const destPath = join(outDir, "src", "content", "docs", `${dest}.md`);
+    const destPath = join(outDir, "content", "docs", `${dest}.mdx`);
 
     if (!existsSync(srcPath)) {
       console.warn(`⚠️  Missing: ${srcPath}`);
@@ -148,7 +209,7 @@ function build(docsDir: string, outDir: string) {
 
     writeFileSync(destPath, content, "utf-8");
   }
-  console.log(`📄 Copied ${pageMap.length} pages`);
+  console.log(`📄 Generated ${pageMap.length} pages + ${metaFiles.length} navigation meta files`);
 
   // ── 5. Generate theme CSS (dynamic — depends on user config) ─────────────
   const themeCss = generateThemeCss({
@@ -157,61 +218,24 @@ function build(docsDir: string, outDir: string) {
     appearance: config.appearance,
     styling: config.styling,
   });
-  writeFileSync(join(outDir, "src", "styles", "velu-theme.css"), themeCss, "utf-8");
-  console.log(`🎨 Generated theme: ${config.theme || "mint"}`);
+  writeFileSync(join(outDir, "app", "velu-theme.css"), themeCss, "utf-8");
+  console.log(`🎨 Generated theme: ${resolveThemeName(config.theme)}`);
 
-  // ── 6. Generate Astro config (dynamic — expressiveCode varies) ───────────
-  let expressiveCodeConfig = "";
-  if (config.styling?.codeblocks?.theme) {
-    const cbt = config.styling.codeblocks.theme;
-    if (typeof cbt === "string") {
-      expressiveCodeConfig = `\n      expressiveCode: { themes: ['${cbt}'] },`;
-    } else {
-      expressiveCodeConfig = `\n      expressiveCode: { themes: ['${cbt.dark}', '${cbt.light}'] },`;
-    }
-  }
-
-  const astroConfig = `import { defineConfig } from 'astro/config';
-import starlight from '@astrojs/starlight';
-import { ion } from 'starlight-ion-theme';
-import { getSidebar } from './src/lib/velu.ts';
-
-export default defineConfig({
-  devToolbar: { enabled: false },
-  integrations: [
-    starlight({
-      title: 'Velu Docs',
-      plugins: [ion()],
-      components: {
-        Sidebar: './src/components/Sidebar.astro',
-        PageTitle: './src/components/PageTitle.astro',
-        Footer: './src/components/Footer.astro',
-      },
-      customCss: ['./src/styles/velu-theme.css', './src/styles/tabs.css', './src/styles/assistant.css'],${expressiveCodeConfig}
-      sidebar: getSidebar(),
-    }),
-  ],
-});
-`;
-  writeFileSync(join(outDir, "_config.mjs"), astroConfig, "utf-8");
-  console.log("⚙️  Generated site config");
-
-  // ── 7. Generate index.mdx (dynamic — references first page) ─────────────
-  const firstPage = pageMap[0]?.dest || "quickstart";
+  // ── 6. Generate index.mdx (dynamic — references first page) ──────────────
   writeFileSync(
-    join(outDir, "src", "content", "docs", "index.mdx"),
-    `---\ntitle: "Welcome to Velu Docs"\ndescription: Documentation powered by Velu\n---\n\nWelcome to the documentation. Head over to the [Quickstart](/${firstPage}/) to get started.\n`,
+    join(outDir, "content", "docs", "index.mdx"),
+    `---\ntitle: "Overview"\ndescription: Documentation powered by Velu\n---\n\nimport { Card, Cards } from "fumadocs-ui/components/card"\nimport { Callout } from "fumadocs-ui/components/callout"\n\n<Callout type="info">\n  Welcome to your documentation site.\n</Callout>\n\n## Start here\n\n<Cards>\n  <Card\n    title="Read the docs"\n    href="/${firstPage}/"\n    description="Begin with the first page in your configured navigation."\n  />\n</Cards>\n`,
     "utf-8"
   );
 
-  // ── 8. Generate minimal package.json (type: module, no deps needed) ──────
-  const astroPkg = {
+  // ── 7. Generate minimal package.json (type: module, no local deps) ───────
+  const sitePkg = {
     name: "velu-docs-site",
     version: "0.0.1",
     private: true,
     type: "module",
   };
-  writeFileSync(join(outDir, "package.json"), JSON.stringify(astroPkg, null, 2) + "\n", "utf-8");
+  writeFileSync(join(outDir, "package.json"), JSON.stringify(sitePkg, null, 2) + "\n", "utf-8");
 
   console.log("📦 Generated boilerplate");
   console.log(`\n✅ Site generated at: ${outDir}`);

@@ -1,16 +1,105 @@
-import { dev, build, preview } from 'astro';
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { watch } from 'node:fs';
-import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from 'node:fs';
-import { resolve, dirname, relative, extname, join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, extname, join, resolve } from 'node:path';
 
-// ── Docs directory (parent of .velu-out) ────────────────────────────────────
-const docsDir = resolve('..');
-const contentDir = resolve('src', 'content', 'docs');
+const require = createRequire(import.meta.url);
+const nextBinPath = require.resolve('next/dist/bin/next');
 
-// ── Page processing (mirrors build.ts logic) ────────────────────────────────
+// ── Docs directory (passed via env var from CLI) ────────────────────────────
+const docsDir = process.env.VELU_DOCS_DIR || resolve('..');
+const contentDir = resolve('content', 'docs');
+
+function loadConfig() {
+  const raw = readFileSync(join(docsDir, 'velu.json'), 'utf-8');
+  return JSON.parse(raw);
+}
+
+function pageBasename(page) {
+  return page.split('/').pop();
+}
+
 function pageLabelFromSlug(slug) {
   const last = slug.split('/').pop() || slug;
-  return last.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return last.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function buildArtifacts(config) {
+  const pageMap = [];
+  const metaFiles = [];
+  const rootTabs = (config.navigation?.tabs || []).filter((tab) => !tab.href);
+  const rootPages = rootTabs.map((tab) => tab.slug);
+  let firstPage = 'quickstart';
+  let hasFirstPage = false;
+
+  function trackFirstPage(dest) {
+    if (!hasFirstPage) {
+      firstPage = dest;
+      hasFirstPage = true;
+    }
+  }
+
+  function addGroup(group, parentDir) {
+    const groupDir = `${parentDir}/${group.slug}`;
+    const pages = [];
+
+    for (const item of group.pages || []) {
+      if (typeof item === 'string') {
+        const basename = pageBasename(item);
+        const dest = `${groupDir}/${basename}`;
+        pageMap.push({ src: item, dest });
+        pages.push(basename);
+        trackFirstPage(dest);
+      } else {
+        addGroup(item, groupDir);
+        pages.push(item.slug);
+      }
+    }
+
+    const groupMeta = {
+      title: group.group,
+      pages,
+      defaultOpen: group.expanded !== false,
+    };
+
+    if (group.icon) groupMeta.icon = group.icon;
+
+    metaFiles.push({ dir: groupDir, data: groupMeta });
+  }
+
+  for (const tab of rootTabs) {
+    const tabPages = [];
+
+    for (const group of tab.groups || []) {
+      addGroup(group, tab.slug);
+      tabPages.push(group.slug);
+    }
+
+    for (const page of tab.pages || []) {
+      const basename = pageBasename(page);
+      const dest = `${tab.slug}/${basename}`;
+      pageMap.push({ src: page, dest });
+      tabPages.push(basename);
+      trackFirstPage(dest);
+    }
+
+    const tabMeta = {
+      title: tab.tab,
+      root: true,
+      pages: tabPages,
+    };
+
+    if (tab.icon) tabMeta.icon = tab.icon;
+
+    metaFiles.push({ dir: tab.slug, data: tabMeta });
+  }
+
+  if (rootPages.length > 0) {
+    metaFiles.push({ dir: '', data: { pages: rootPages } });
+  }
+
+  return { pageMap, metaFiles, firstPage };
 }
 
 function processPage(srcPath, destPath, slug) {
@@ -21,46 +110,129 @@ function processPage(srcPath, destPath, slug) {
     if (titleMatch) {
       content = content.replace(/^#\s+.+$/m, '').trimStart();
     }
-    content = '---\ntitle: "' + title + '"\n---\n\n' + content;
+    content = `---\ntitle: "${title}"\n---\n\n${content}`;
   }
+
   mkdirSync(dirname(destPath), { recursive: true });
   writeFileSync(destPath, content, 'utf-8');
+}
+
+function writeMetaFiles(metaFiles) {
+  for (const meta of metaFiles) {
+    const metaPath = join(contentDir, meta.dir, 'meta.json');
+    mkdirSync(dirname(metaPath), { recursive: true });
+    writeFileSync(metaPath, JSON.stringify(meta.data, null, 2) + '\n', 'utf-8');
+  }
+}
+
+function writeIndexPage(firstPage) {
+  writeFileSync(
+    join(contentDir, 'index.mdx'),
+    `---\ntitle: "Overview"\ndescription: Documentation powered by Velu\n---\n\nimport { Card, Cards } from "fumadocs-ui/components/card"\nimport { Callout } from "fumadocs-ui/components/callout"\n\n<Callout type="info">\n  Welcome to your documentation site.\n</Callout>\n\n## Start here\n\n<Cards>\n  <Card\n    title="Read the docs"\n    href="/${firstPage}/"\n    description="Begin with the first page in your configured navigation."\n  />\n</Cards>\n`,
+    'utf-8'
+  );
+}
+
+function rebuildFromConfig() {
+  const config = loadConfig();
+  const artifacts = buildArtifacts(config);
+
+  rmSync(contentDir, { recursive: true, force: true });
+  mkdirSync(contentDir, { recursive: true });
+
+  writeMetaFiles(artifacts.metaFiles);
+
+  for (const { src, dest } of artifacts.pageMap) {
+    const srcPath = join(docsDir, `${src}.md`);
+    if (!existsSync(srcPath)) continue;
+    const destPath = join(contentDir, `${dest}.mdx`);
+    processPage(srcPath, destPath, src);
+  }
+
+  writeIndexPage(artifacts.firstPage);
+  return artifacts.pageMap;
+}
+
+let pageMap = rebuildFromConfig();
+
+function syncMarkdownFile(filename) {
+  const srcSlug = filename.replace(/\\/g, '/').replace(/\.md$/, '');
+  const srcPath = join(docsDir, `${srcSlug}.md`);
+
+  if (!existsSync(srcPath)) {
+    pageMap = rebuildFromConfig();
+    return;
+  }
+
+  const matches = pageMap.filter((entry) => entry.src === srcSlug);
+  if (matches.length === 0) return;
+
+  for (const match of matches) {
+    const destPath = join(contentDir, `${match.dest}.mdx`);
+    processPage(srcPath, destPath, srcSlug);
+  }
+
+  console.log('  \x1b[32m↻\x1b[0m  ' + srcSlug);
+}
+
+function syncConfig() {
+  const srcPath = join(docsDir, 'velu.json');
+  copyFileSync(srcPath, resolve('velu.json'));
+  pageMap = rebuildFromConfig();
+  console.log('  \x1b[32m↻\x1b[0m  velu.json updated (navigation/content synced)');
 }
 
 function startWatcher() {
   const debounce = new Map();
 
-  watch(docsDir, { recursive: true }, (eventType, filename) => {
-    if (!filename) return;
-    // Ignore changes inside .velu-out itself
-    if (filename.startsWith('.velu-out')) return;
-    // Ignore node_modules, hidden dirs
-    if (filename.includes('node_modules') || filename.startsWith('.')) return;
+  watch(docsDir, { recursive: true }, (_, rawFilename) => {
+    if (!rawFilename) return;
+    const filename = rawFilename.replace(/\\/g, '/');
 
-    // Debounce — avoid duplicate events
+    if (filename.startsWith('.velu-out/')) return;
+    if (filename.includes('node_modules')) return;
+    if (filename.startsWith('.')) return;
+
     if (debounce.has(filename)) clearTimeout(debounce.get(filename));
-    debounce.set(filename, setTimeout(() => {
-      debounce.delete(filename);
-      const srcPath = join(docsDir, filename);
-      if (!existsSync(srcPath)) return;
+    debounce.set(
+      filename,
+      setTimeout(() => {
+        debounce.delete(filename);
 
-      if (filename === 'velu.json') {
-        copyFileSync(srcPath, resolve('velu.json'));
-        console.log('  \x1b[32m↻\x1b[0m  velu.json updated');
-        return;
-      }
-
-      if (extname(filename) === '.md') {
-        const slug = filename.replace(/\\/g, '/').replace(/\.md$/, '');
-        const destPath = join(contentDir, slug + '.md');
         try {
-          processPage(srcPath, destPath, slug);
-          console.log('  \x1b[32m↻\x1b[0m  ' + slug);
-        } catch (e) {
-          console.error('  \x1b[31m✗\x1b[0m  Failed to sync ' + filename + ': ' + e.message);
+          if (filename === 'velu.json') {
+            syncConfig();
+            return;
+          }
+
+          if (extname(filename) === '.md') {
+            syncMarkdownFile(filename);
+          }
+        } catch (error) {
+          console.error('  \x1b[31m✗\x1b[0m  Failed to sync ' + filename + ': ' + error.message);
         }
-      }
-    }, 100));
+      }, 120)
+    );
+  });
+}
+
+function runNext(command, port) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const args = [nextBinPath, command];
+    if (command === 'dev' || command === 'start') {
+      args.push('--port', String(port));
+    }
+
+    const child = spawn(process.execPath, args, {
+      cwd: '.',
+      stdio: 'inherit',
+      env: process.env,
+    });
+
+    child.on('exit', (code) => {
+      if (code === 0) resolvePromise();
+      else rejectPromise(new Error(`${command} exited with ${code}`));
+    });
   });
 }
 
@@ -68,39 +240,32 @@ function startWatcher() {
 const args = process.argv.slice(2);
 const command = args[0] || 'dev';
 const portIdx = args.indexOf('--port');
-const port = portIdx !== -1 ? parseInt(args[portIdx + 1]) : 4321;
+const port = portIdx !== -1 ? parseInt(args[portIdx + 1], 10) : 4321;
 
 if (command === 'dev') {
-  const server = await dev({
-    root: '.',
-    configFile: './_config.mjs',
-    server: { port },
-    logLevel: 'silent',
-  });
-  const addr = server.address;
   console.log('');
-  console.log('  \x1b[36mvelu\x1b[0m  v0.1.0  ready');
-  console.log('');
-  console.log('  ┃ Local    \x1b[36mhttp://localhost:' + addr.port + '/\x1b[0m');
-  console.log('  ┃ Network  use --host to expose');
+  console.log('  \x1b[36mvelu\x1b[0m  dev server');
   console.log('');
   console.log('  watching for file changes...');
   startWatcher();
+  await runNext('dev', port);
 } else if (command === 'build') {
   console.log('\n  Building site...\n');
-  await build({ root: '.', configFile: './_config.mjs', logLevel: 'warn' });
-  console.log('\n  ✅ Site built successfully.\n');
-} else if (command === 'preview') {
-  const server = await preview({
-    root: '.',
-    configFile: './_config.mjs',
-    server: { port },
-    logLevel: 'silent',
+  await runNext('build', port);
+
+  // Run Pagefind to index the static output for search
+  console.log('  Indexing for search...');
+  const pagefindBin = join(dirname(require.resolve('next/package.json')), '..', 'pagefind', 'lib', 'runner', 'bin.cjs');
+  await new Promise((res, rej) => {
+    const pf = spawn(process.execPath, [pagefindBin, '--site', 'dist', '--output-path', 'dist/pagefind'], {
+      cwd: '.',
+      stdio: 'inherit',
+    });
+    pf.on('exit', (code) => (code === 0 ? res() : rej(new Error(`pagefind exited with ${code}`))));
   });
-  const addr = server.address;
-  console.log('');
-  console.log('  \x1b[36mvelu\x1b[0m  preview');
-  console.log('');
-  console.log('  ┃ Local    \x1b[36mhttp://localhost:' + addr.port + '/\x1b[0m');
-  console.log('');
+
+  console.log('\n  ✅ Site built successfully.\n');
+} else {
+  console.error(`Unknown server command: ${command}`);
+  process.exit(1);
 }

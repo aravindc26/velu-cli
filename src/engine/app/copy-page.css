@@ -1,0 +1,132 @@
+/* ── Copy page button ─────────────────────────────────────────────────── */
+
+.velu-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.velu-title-row h1 {
+  margin: 0;
+}
+
+.velu-copy-page-container {
+  position: relative;
+  flex-shrink: 0;
+  margin-top: 0.35rem;
+}
+
+.velu-copy-split-btn {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-fd-border, #27272a);
+  border-radius: 999px;
+  background: var(--color-fd-card, #18181b);
+}
+
+.velu-copy-main-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-fd-muted-foreground, #a1a1aa);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.velu-copy-main-btn:hover {
+  color: var(--color-fd-foreground, #fafafa);
+}
+
+.velu-copy-sep {
+  width: 1px;
+  height: 14px;
+  background-color: var(--color-fd-border, #27272a);
+  flex-shrink: 0;
+}
+
+.velu-copy-caret-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.5rem;
+  background: none;
+  border: none;
+  color: var(--color-fd-muted-foreground, #a1a1aa);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.velu-copy-caret-btn:hover {
+  color: var(--color-fd-foreground, #fafafa);
+}
+
+.velu-copy-chevron {
+  transition: transform 0.15s;
+}
+
+.velu-copy-caret-btn[aria-expanded='true'] .velu-copy-chevron {
+  transform: rotate(180deg);
+}
+
+.velu-copy-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 100;
+  min-width: 16rem;
+  padding: 0.35rem;
+  background: var(--color-fd-card, #18181b);
+  border: 1px solid var(--color-fd-border, #27272a);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.velu-copy-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--color-fd-foreground, #fafafa);
+  text-align: left;
+  text-decoration: none;
+  background: none;
+  border: none;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.velu-copy-option:hover {
+  background-color: var(--color-fd-accent, #27272a);
+}
+
+.velu-copy-option svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+  margin-top: 0.15rem;
+  overflow: visible;
+}
+
+.velu-copy-option-title {
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.velu-copy-option-desc {
+  font-size: 0.75rem;
+  color: var(--color-fd-muted-foreground, #a1a1aa);
+  line-height: 1.3;
+}
+
+.velu-external-arrow {
+  font-size: 0.75em;
+  opacity: 0.5;
+}

@@ -1,12 +1,12 @@
 {
   "name": "@aravindc26/velu",
-  "version": "0.8.0",
+  "version": "0.9.1",
   "description": "A modern documentation site generator powered by Markdown and JSON configuration",
   "type": "module",
   "license": "MIT",
   "keywords": ["docs", "documentation", "markdown", "static-site", "cli"],
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.9.0"
   },
   "bin": {
     "velu": "./bin/velu.mjs"
@@ -22,16 +22,24 @@
     "dev": "tsx src/cli.ts run"
   },
   "dependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/mdx": "^2.0.13",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.13",
+    "@types/react-dom": "^19.2.3",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
-    "astro": "^5.12.0",
-    "@astrojs/starlight": "^0.35.0",
-    "sharp": "^0.33.0",
-    "starlight-ion-theme": "^2.3.0",
-    "tsx": "^4.19.0"
+    "fumadocs-core": "^16.6.0",
+    "fumadocs-mdx": "^14.2.7",
+    "fumadocs-ui": "^16.6.0",
+    "next": "^16.1.6",
+    "postcss": "^8.5.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.9.3",
+    "tsx": "^4.19.0",
+    "pagefind": "^1.3.0"
   },
-  "devDependencies": {
-    "typescript": "^5.7.0",
-    "@types/node": "^22.0.0"
-  }
+  "devDependencies": {}
 }

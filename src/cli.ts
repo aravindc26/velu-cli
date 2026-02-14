@@ -9,11 +9,12 @@ const SCHEMA_PATH = join(PACKAGE_ROOT, "schema", "velu.schema.json");
 const NODE_MODULES_PATH = join(PACKAGE_ROOT, "node_modules");
 
 /** Build env that lets spawned processes resolve deps from the CLI's own node_modules */
-function engineEnv(): NodeJS.ProcessEnv {
+function engineEnv(docsDir?: string): NodeJS.ProcessEnv {
   const existing = process.env.NODE_PATH || "";
   return {
     ...process.env,
     NODE_PATH: existing ? `${NODE_MODULES_PATH}${delimiter}${existing}` : NODE_MODULES_PATH,
+    ...(docsDir ? { VELU_DOCS_DIR: docsDir } : {}),
   };
 }
 
@@ -48,7 +49,7 @@ function init(targetDir: string) {
   // velu.json
   const config = {
     $schema: "https://raw.githubusercontent.com/aravindc26/velu/main/schema/velu.schema.json",
-    theme: "violet" as const,
+    theme: "neutral" as const,
     navigation: {
       tabs: [
         {
@@ -75,7 +76,7 @@ function init(targetDir: string) {
 
   // Example pages
   const pages: Record<string, string> = {
-    "quickstart.md": `# Quickstart\n\nWelcome to your new documentation site!\n\n## Prerequisites\n\n- Node.js 18+\n- npm\n\n## Getting Started\n\n1. Edit the markdown files in this directory\n2. Update \`velu.json\` to configure navigation\n3. Run \`velu run\` to start the dev server\n\n\`\`\`bash\nvelu run\n\`\`\`\n\nYour site is live at \`http://localhost:4321\`.\n`,
+    "quickstart.md": `# Quickstart\n\nWelcome to your new documentation site!\n\n## Prerequisites\n\n- Node.js 20.9+\n- npm\n\n## Getting Started\n\n1. Edit the markdown files in this directory\n2. Update \`velu.json\` to configure navigation\n3. Run \`velu run\` to start the dev server\n\n\`\`\`bash\nvelu run\n\`\`\`\n\nYour site is live at \`http://localhost:4321\`.\n`,
     "installation.md": `# Installation\n\nInstall Velu globally:\n\n\`\`\`bash\nnpm install -g @aravindc26/velu\n\`\`\`\n\nOr run directly with npx:\n\n\`\`\`bash\nnpx @aravindc26/velu run\n\`\`\`\n`,
     "guides/configuration.md": `# Configuration\n\nVelu uses a \`velu.json\` file to define your site's navigation.\n\n## Navigation Structure\n\n- **Tabs** — Top-level horizontal navigation\n- **Groups** — Collapsible sidebar sections within a tab\n- **Pages** — Individual markdown documents\n\n## Example\n\n\`\`\`json\n{\n  "navigation": {\n    "tabs": [\n      {\n        "tab": "Getting Started",\n        "slug": "getting-started",\n        "groups": [\n          {\n            "group": "Basics",\n            "slug": "getting-started",\n            "pages": ["quickstart"]\n          }\n        ]\n      }\n    ]\n  }\n}\n\`\`\`\n`,
     "guides/deployment.md": `# Deployment\n\nBuild your site for production:\n\n\`\`\`bash\nvelu build\n\`\`\`\n\nThe output is a static site you can deploy anywhere — Netlify, Vercel, GitHub Pages, etc.\n`,
@@ -125,17 +126,19 @@ async function lint(docsDir: string) {
 
 async function generateProject(docsDir: string): Promise<string> {
   const { build } = await import("./build.js");
-  const outDir = join(docsDir, ".velu-out");
+  // Place .velu-out inside CLI package dir so node_modules resolves
+  // naturally by walking up — avoids symlinks that Turbopack rejects.
+  const outDir = join(PACKAGE_ROOT, ".velu-out");
   build(docsDir, outDir);
   return outDir;
 }
 
-async function buildStatic(outDir: string) {
+async function buildStatic(outDir: string, docsDir: string) {
   await new Promise<void>((res, rej) => {
     const child = spawn("node", ["_server.mjs", "build"], {
       cwd: outDir,
       stdio: "inherit",
-      env: engineEnv(),
+      env: engineEnv(docsDir),
     });
     child.on("exit", (code) => (code === 0 ? res() : rej(new Error(`Build exited with ${code}`))));
   });
@@ -143,18 +146,18 @@ async function buildStatic(outDir: string) {
 
 async function buildSite(docsDir: string) {
   const outDir = await generateProject(docsDir);
-  await buildStatic(outDir);
-  const distDir = join(outDir, "dist");
-  console.log(`\n📁 Static site output: ${distDir}`);
+  await buildStatic(outDir, docsDir);
+  const staticOutDir = join(outDir, "dist");
+  console.log(`\n📁 Static site output: ${staticOutDir}`);
 }
 
 // ── run ──────────────────────────────────────────────────────────────────────────
 
-function spawnServer(outDir: string, command: string, port: number) {
+function spawnServer(outDir: string, command: string, port: number, docsDir: string) {
   const child = spawn("node", ["_server.mjs", command, "--port", String(port)], {
     cwd: outDir,
     stdio: "inherit",
-    env: engineEnv(),
+    env: engineEnv(docsDir),
   });
 
   child.on("exit", (code) => process.exit(code ?? 0));
@@ -166,7 +169,7 @@ function spawnServer(outDir: string, command: string, port: number) {
 
 async function run(docsDir: string, port: number) {
   const outDir = await generateProject(docsDir);
-  spawnServer(outDir, "dev", port);
+  spawnServer(outDir, "dev", port, docsDir);
 }
 
 // ── Parse args ───────────────────────────────────────────────────────────────────

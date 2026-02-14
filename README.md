@@ -2,6 +2,11 @@
 
 A modern documentation site generator. Write Markdown, configure with JSON, ship a beautiful docs site.
 
+## Requirements
+
+- Node.js 20.9+
+- npm
+
 ## Install
 
 ```bash
@@ -29,6 +34,8 @@ Your site is live at `http://localhost:4321`.
 | `velu run`           | Build and start the dev server (default port 4321)|
 | `velu run --port N`  | Start on a custom port                           |
 | `velu build`         | Build the site without starting a server         |
+
+`velu build` outputs a static site at `.velu-out/out`.
 
 ## Navigation
 

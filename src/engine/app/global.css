@@ -1,0 +1,39 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/preset.css';
+@import './velu-theme.css';
+
+body {
+  min-height: 100vh;
+}
+
+/* Ensure sidebar/toc widths are set on the grid layout */
+@media (min-width: 768px) {
+  #nd-docs-layout[data-sidebar-collapsed='false'] {
+    --fd-sidebar-width: 268px;
+  }
+}
+
+@media (min-width: 1280px) {
+  #nd-docs-layout {
+    --fd-toc-width: 268px;
+  }
+}
+
+.velu-footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-fd-border);
+  text-align: right;
+  font-size: 1.2rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.velu-footer a {
+  color: var(--color-fd-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.velu-footer a:hover {
+  text-decoration: underline;
+}

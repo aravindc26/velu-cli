@@ -12,5 +12,5 @@
     "declaration": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", ".velu-out"]
+  "exclude": ["node_modules", ".velu-out", "src/engine"]
 }
