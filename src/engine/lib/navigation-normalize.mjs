@@ -57,10 +57,6 @@ function uniqueSlug(base, used) {
   return candidate;
 }
 
-function isDocumentationSlug(input) {
-  const value = String(input).trim().toLowerCase();
-  return value === 'documentation' || value === 'docs';
-}
 
 function normalizeLink(value) {
   const out = { href: value.href, label: value.label };
@@ -214,10 +210,9 @@ function collectEntries(rawSection, usedGroupSlugs) {
 function normalizeTab(rawTab, usedTabSlugs, slugPrefix) {
   const tabName = typeof rawTab.tab === 'string' ? rawTab.tab : 'Tab';
   const rawSlug = typeof rawTab.slug === 'string' ? rawTab.slug : tabName;
-  const prefixedRawSlug = slugPrefix
-    ? (isDocumentationSlug(rawSlug) ? slugPrefix : `${slugPrefix}-${rawSlug}`)
-    : rawSlug;
-  const slug = uniqueSlug(slugify(prefixedRawSlug, 'tab'), usedTabSlugs);
+  const tabSlugPart = slugify(rawSlug, 'tab');
+  const fullSlug = slugPrefix ? `${slugPrefix}/${tabSlugPart}` : tabSlugPart;
+  const slug = uniqueSlug(fullSlug, usedTabSlugs);
 
   const out = { tab: tabName, slug };
   if (typeof rawTab.icon === 'string') out.icon = rawTab.icon;
@@ -454,6 +449,8 @@ export function normalizeConfigNavigation(config) {
       ...nav,
       tabs: normalizeNavigationTabs(nav),
       languages: normalizeLanguageEntries(nav.languages),
+      products: Array.isArray(nav.products) ? nav.products : [],
+      versions: Array.isArray(nav.versions) ? nav.versions : [],
     },
   };
 }

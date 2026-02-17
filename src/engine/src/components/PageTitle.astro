@@ -405,19 +405,30 @@ const title = Astro.locals.starlightRoute.entry.data.title;
     }
   }, true);
 
-  // Hide ask bar only when user scrolls to the very bottom
-  window.addEventListener('scroll', function() {
+  // Hide ask bar only when truly near the page bottom.
+  function syncAskBarVisibility() {
     if (isPanelOpen()) return;
     var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
     var docHeight = document.documentElement.scrollHeight;
     var winHeight = window.innerHeight;
-    if (docHeight <= winHeight + 10) return; // short pages: always show
-    if (docHeight - scrollTop - winHeight < 60) {
+    var bottomGap = docHeight - scrollTop - winHeight;
+    var nearBottomThreshold = 8;
+
+    if (docHeight <= winHeight + 2) {
+      askBar.classList.remove('velu-ask-bar-hidden');
+      return;
+    }
+
+    if (bottomGap <= nearBottomThreshold) {
       askBar.classList.add('velu-ask-bar-hidden');
     } else {
       askBar.classList.remove('velu-ask-bar-hidden');
     }
-  }, { passive: true });
+  }
+
+  window.addEventListener('scroll', syncAskBarVisibility, { passive: true });
+  window.addEventListener('resize', syncAskBarVisibility, { passive: true });
+  syncAskBarVisibility();
 
   document.onkeydown = function(e) {
     if (e.key === 'Escape' && isPanelOpen()) { closePanel(); }

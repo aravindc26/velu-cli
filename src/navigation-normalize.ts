@@ -6,12 +6,14 @@ interface NavLink {
   href: string;
   label: string;
   icon?: string;
+  iconType?: string;
 }
 
 interface NavGroup {
   group: string;
   slug: string;
   icon?: string;
+  iconType?: string;
   tag?: string;
   expanded?: boolean;
   description?: string;
@@ -23,6 +25,7 @@ interface NavTab {
   tab: string;
   slug: string;
   icon?: string;
+  iconType?: string;
   href?: string;
   pages?: Array<string | NavSeparator | NavLink>;
   groups?: NavGroup[];
@@ -89,14 +92,11 @@ function uniqueSlug(base: string, used: Set<string>): string {
   return candidate;
 }
 
-function isDocumentationSlug(input: string): boolean {
-  const value = input.trim().toLowerCase();
-  return value === "documentation" || value === "docs";
-}
 
 function normalizeLink(value: NavLink): NavLink {
   const out: NavLink = { href: value.href, label: value.label };
   if (typeof value.icon === "string" && value.icon.length > 0) out.icon = value.icon;
+  if (typeof value.iconType === "string" && value.iconType.length > 0) out.iconType = value.iconType;
   return out;
 }
 
@@ -104,7 +104,11 @@ function normalizeAnchorLink(value: Record<string, unknown>): NavLink {
   const href = typeof value.href === "string" ? value.href : "#";
   const label = typeof value.anchor === "string" ? value.anchor : "Link";
   const icon = typeof value.icon === "string" ? value.icon : undefined;
-  return icon ? { href, label, icon } : { href, label };
+  const iconType = typeof value.iconType === "string" ? value.iconType : undefined;
+  const out: NavLink = { href, label };
+  if (icon) out.icon = icon;
+  if (iconType) out.iconType = iconType;
+  return out;
 }
 
 function hasContent(value: Record<string, unknown>): boolean {
@@ -141,6 +145,7 @@ function normalizeGroup(rawGroup: Record<string, unknown>, usedGroupSlugs: Set<s
 
   const out: NavGroup = { group: groupName, slug: groupSlug, pages };
   if (typeof rawGroup.icon === "string") out.icon = rawGroup.icon;
+  if (typeof rawGroup.iconType === "string") out.iconType = rawGroup.iconType;
   if (typeof rawGroup.tag === "string") out.tag = rawGroup.tag;
   if (typeof rawGroup.expanded === "boolean") out.expanded = rawGroup.expanded;
   if (typeof rawGroup.description === "string") out.description = rawGroup.description;
@@ -157,6 +162,7 @@ function normalizeMenuItem(rawItem: Record<string, unknown>, usedGroupSlugs: Set
   const pages = collectEntries(rawItem, nestedGroupSlugs);
   const out: NavGroup = { group: name, slug, pages };
   if (typeof rawItem.icon === "string") out.icon = rawItem.icon;
+  if (typeof rawItem.iconType === "string") out.iconType = rawItem.iconType;
   return out;
 }
 
@@ -168,11 +174,17 @@ function normalizeTabAsGroup(rawTab: Record<string, unknown>, usedGroupSlugs: Se
   const pages = collectEntries(rawTab, nestedGroupSlugs);
 
   if (typeof rawTab.href === "string" && rawTab.href.length > 0 && !hasContent(rawTab)) {
-    pages.push({ href: rawTab.href, label: tabName, ...(typeof rawTab.icon === "string" ? { icon: rawTab.icon } : {}) });
+    pages.push({
+      href: rawTab.href,
+      label: tabName,
+      ...(typeof rawTab.icon === "string" ? { icon: rawTab.icon } : {}),
+      ...(typeof rawTab.iconType === "string" ? { iconType: rawTab.iconType } : {}),
+    });
   }
 
   const out: NavGroup = { group: tabName, slug, pages };
   if (typeof rawTab.icon === "string") out.icon = rawTab.icon;
+  if (typeof rawTab.iconType === "string") out.iconType = rawTab.iconType;
   return out;
 }
 
@@ -182,6 +194,7 @@ function normalizeDropdownAsGroup(rawDropdown: Record<string, unknown>, usedGrou
       tab: rawDropdown.dropdown,
       slug: rawDropdown.slug,
       icon: rawDropdown.icon,
+      iconType: rawDropdown.iconType,
       href: rawDropdown.href,
       groups: rawDropdown.groups,
       pages: rawDropdown.pages,
@@ -203,6 +216,7 @@ function normalizeAnchorAsGroup(rawAnchor: Record<string, unknown>, usedGroupSlu
 
   const out: NavGroup = { group: anchorName, slug, pages };
   if (typeof rawAnchor.icon === "string") out.icon = rawAnchor.icon;
+  if (typeof rawAnchor.iconType === "string") out.iconType = rawAnchor.iconType;
   return out;
 }
 
@@ -246,13 +260,13 @@ function collectEntries(rawSection: Record<string, unknown>, usedGroupSlugs: Set
 function normalizeTab(rawTab: Record<string, unknown>, usedTabSlugs: Set<string>, slugPrefix: string): NavTab {
   const tabName = typeof rawTab.tab === "string" ? rawTab.tab : "Tab";
   const rawSlug = typeof rawTab.slug === "string" ? rawTab.slug : tabName;
-  const prefixedRawSlug = slugPrefix
-    ? (isDocumentationSlug(rawSlug) ? slugPrefix : `${slugPrefix}-${rawSlug}`)
-    : rawSlug;
-  const slug = uniqueSlug(slugify(prefixedRawSlug, "tab"), usedTabSlugs);
+  const tabSlugPart = slugify(rawSlug, "tab");
+  const fullSlug = slugPrefix ? `${slugPrefix}/${tabSlugPart}` : tabSlugPart;
+  const slug = uniqueSlug(fullSlug, usedTabSlugs);
 
   const out: NavTab = { tab: tabName, slug };
   if (typeof rawTab.icon === "string") out.icon = rawTab.icon;
+  if (typeof rawTab.iconType === "string") out.iconType = rawTab.iconType;
 
   if (typeof rawTab.href === "string" && rawTab.href.length > 0 && !hasContent(rawTab)) {
     out.href = rawTab.href;
@@ -280,6 +294,7 @@ function normalizeDropdownToTab(rawDropdown: Record<string, unknown>, usedTabSlu
       tab: rawDropdown.dropdown,
       slug: rawDropdown.slug,
       icon: rawDropdown.icon,
+      iconType: rawDropdown.iconType,
       href: rawDropdown.href,
       groups: rawDropdown.groups,
       pages: rawDropdown.pages,
@@ -334,6 +349,7 @@ function normalizeNavigationTabs(navigation: unknown, usedTabSlugs = new Set<str
                 tab: productName,
                 slug: prefix,
                 icon: product.icon,
+                iconType: product.iconType,
                 groups: product.groups,
                 pages: product.pages,
                 menu: product.menu,
@@ -352,6 +368,7 @@ function normalizeNavigationTabs(navigation: unknown, usedTabSlugs = new Set<str
                 tab: productName,
                 slug: prefix,
                 icon: product.icon,
+                iconType: product.iconType,
                 href: product.href,
               },
               usedTabSlugs,
@@ -423,6 +440,7 @@ function normalizeNavigationTabs(navigation: unknown, usedTabSlugs = new Set<str
               tab: anchorName,
               slug: prefix,
               icon: anchor.icon,
+              iconType: anchor.iconType,
               groups: anchor.groups,
               pages: anchor.pages,
               menu: anchor.menu,
@@ -486,6 +504,8 @@ export function normalizeConfigNavigation<T extends { navigation?: unknown }>(co
       ...nav,
       tabs: normalizeNavigationTabs(nav),
       languages: normalizeLanguageEntries(nav.languages),
+      products: Array.isArray(nav.products) ? nav.products : [],
+      versions: Array.isArray(nav.versions) ? nav.versions : [],
     },
   } as T;
 }

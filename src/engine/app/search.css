@@ -116,3 +116,23 @@
   border-radius: 2px;
   padding: 0 2px;
 }
+
+/* Search filter indicator */
+.fd-search-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--color-fd-border, #27272a);
+  background: var(--color-fd-accent, #27272a);
+  font-size: 0.75rem;
+}
+
+.fd-search-filter-label {
+  color: var(--color-fd-muted-foreground, #a1a1aa);
+}
+
+.fd-search-filter-value {
+  color: var(--color-fd-primary, #818cf8);
+  font-weight: 500;
+}

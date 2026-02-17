@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { watch } from 'node:fs';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, extname, join, resolve } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, extname, join, relative, resolve } from 'node:path';
 import { normalizeConfigNavigation } from './lib/navigation-normalize.mjs';
 
 const require = createRequire(import.meta.url);
@@ -11,9 +11,50 @@ const nextBinPath = require.resolve('next/dist/bin/next');
 // ── Docs directory (passed via env var from CLI) ────────────────────────────
 const docsDir = process.env.VELU_DOCS_DIR || resolve('..');
 const contentDir = resolve('content', 'docs');
+const publicDir = resolve('public');
+const PRIMARY_CONFIG_NAME = 'docs.json';
+const LEGACY_CONFIG_NAME = 'velu.json';
+const STATIC_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.ico', '.avif',
+  '.mp4', '.webm', '.ogg', '.mp3', '.wav', '.pdf', '.txt',
+]);
+
+function resolveConfigPath() {
+  const primary = join(docsDir, PRIMARY_CONFIG_NAME);
+  if (existsSync(primary)) return primary;
+  return join(docsDir, LEGACY_CONFIG_NAME);
+}
+
+function isStaticAsset(filename) {
+  const ext = extname(filename).toLowerCase();
+  return STATIC_EXTENSIONS.has(ext);
+}
+
+function copyStaticAssets() {
+  function walk(dir) {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
+      if (entry.name === 'node_modules') continue;
+      const srcPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(srcPath);
+        continue;
+      }
+      if (!isStaticAsset(srcPath)) continue;
+      const rel = relative(docsDir, srcPath);
+      const destPath = join(publicDir, rel);
+      mkdirSync(dirname(destPath), { recursive: true });
+      copyFileSync(srcPath, destPath);
+    }
+  }
+
+  mkdirSync(publicDir, { recursive: true });
+  walk(docsDir);
+}
 
 function loadConfig() {
-  const raw = readFileSync(join(docsDir, 'velu.json'), 'utf-8');
+  const raw = readFileSync(resolveConfigPath(), 'utf-8');
   return normalizeConfigNavigation(JSON.parse(raw));
 }
 
@@ -96,6 +137,7 @@ function buildArtifacts(config) {
     };
 
     if (group.icon) groupMeta.icon = group.icon;
+    if (group.iconType) groupMeta.iconType = group.iconType;
     if (group.description) groupMeta.description = group.description;
 
     metaFiles.push({ dir: groupDir, data: groupMeta });
@@ -128,6 +170,7 @@ function buildArtifacts(config) {
     };
 
     if (tab.icon) tabMeta.icon = tab.icon;
+    if (tab.iconType) tabMeta.iconType = tab.iconType;
 
     metaFiles.push({ dir: tab.slug, data: tabMeta });
   }
@@ -183,11 +226,16 @@ function writeLangContent(langCode, artifacts, isDefault, useLangFolders = false
     : artifacts.metaFiles;
   writeMetaFiles(metaFiles);
 
-  // Copy pages using explicit source paths from velu.json
+  // Copy pages using explicit source paths from docs.json/velu.json
   for (const { src, dest } of artifacts.pageMap) {
-    const srcPath = join(docsDir, `${src}.md`);
+    let srcPath = join(docsDir, `${src}.mdx`);
+    let ext = '.mdx';
     if (!existsSync(srcPath)) {
-      console.warn(`  \x1b[33m⚠\x1b[0m  Missing page source: ${src}.md (language: ${langCode})`);
+      srcPath = join(docsDir, `${src}.md`);
+      ext = '.md';
+    }
+    if (!existsSync(srcPath)) {
+      console.warn(`  \x1b[33m⚠\x1b[0m  Missing page source: ${src}${ext} (language: ${langCode})`);
       continue;
     }
     const destPath = join(contentDir, storagePrefix ? `${storagePrefix}/${dest}.mdx` : `${dest}.mdx`);
@@ -263,10 +311,14 @@ function rebuildFromConfig() {
 }
 
 let pageMap = rebuildFromConfig();
+copyStaticAssets();
 
 function syncMarkdownFile(filename) {
-  const srcSlug = filename.replace(/\\/g, '/').replace(/\.md$/, '');
-  const srcPath = join(docsDir, `${srcSlug}.md`);
+  const srcSlug = filename.replace(/\\/g, '/').replace(/\.(md|mdx)$/, '');
+  let srcPath = join(docsDir, `${srcSlug}.mdx`);
+  if (!existsSync(srcPath)) {
+    srcPath = join(docsDir, `${srcSlug}.md`);
+  }
 
   if (!existsSync(srcPath)) {
     pageMap = rebuildFromConfig();
@@ -285,10 +337,12 @@ function syncMarkdownFile(filename) {
 }
 
 function syncConfig() {
-  const srcPath = join(docsDir, 'velu.json');
-  copyFileSync(srcPath, resolve('velu.json'));
+  const srcPath = resolveConfigPath();
+  copyFileSync(srcPath, resolve(PRIMARY_CONFIG_NAME));
+  copyFileSync(srcPath, resolve(LEGACY_CONFIG_NAME));
   pageMap = rebuildFromConfig();
-  console.log('  \x1b[32m↻\x1b[0m  velu.json updated (navigation/content synced)');
+  copyStaticAssets();
+  console.log('  \x1b[32m↻\x1b[0m  docs.json/velu.json updated (navigation/content synced)');
 }
 
 function startWatcher() {
@@ -309,13 +363,25 @@ function startWatcher() {
         debounce.delete(filename);
 
         try {
-          if (filename === 'velu.json') {
+          if (filename === PRIMARY_CONFIG_NAME || filename === LEGACY_CONFIG_NAME) {
             syncConfig();
             return;
           }
 
-          if (extname(filename) === '.md') {
+          const ext = extname(filename);
+          if (ext === '.md' || ext === '.mdx') {
             syncMarkdownFile(filename);
+            return;
+          }
+
+          if (isStaticAsset(filename)) {
+            const src = join(docsDir, filename);
+            const dest = join(publicDir, filename);
+            if (existsSync(src)) {
+              mkdirSync(dirname(dest), { recursive: true });
+              copyFileSync(src, dest);
+              console.log('  \x1b[32m↻\x1b[0m  ' + filename);
+            }
           }
         } catch (error) {
           console.error('  \x1b[31m✗\x1b[0m  Failed to sync ' + filename + ': ' + error.message);

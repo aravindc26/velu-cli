@@ -7,6 +7,16 @@ const __filename = fileURLToPath(import.meta.url);
 const PACKAGE_ROOT = resolve(dirname(__filename), "..");
 const SCHEMA_PATH = join(PACKAGE_ROOT, "schema", "velu.schema.json");
 const NODE_MODULES_PATH = join(PACKAGE_ROOT, "node_modules");
+const PRIMARY_CONFIG_NAME = "docs.json";
+const LEGACY_CONFIG_NAME = "velu.json";
+
+function resolveConfigPath(dir: string): string | null {
+  const primary = join(dir, PRIMARY_CONFIG_NAME);
+  if (existsSync(primary)) return primary;
+  const legacy = join(dir, LEGACY_CONFIG_NAME);
+  if (existsSync(legacy)) return legacy;
+  return null;
+}
 
 /** Build env that lets spawned processes resolve deps from the CLI's own node_modules */
 function engineEnv(docsDir?: string): NodeJS.ProcessEnv {
@@ -26,27 +36,28 @@ function printHelp() {
 
   Usage:
     velu init              Scaffold a new docs project with example files
-    velu lint              Validate velu.json and check referenced pages
+    velu lint              Validate docs.json (or velu.json) and check referenced pages
     velu run [--port N]    Build site and start dev server (default: 4321)
     velu build             Build a deployable static site (SSG)
+    velu paths             Output all navigation paths and their source files as JSON
 
   Options:
     --port <number>   Port for the dev server (default: 4321)
     --help            Show this help message
 
-  Run lint/run/build from a directory containing velu.json.
+  Run lint/run/build/paths from a directory containing docs.json (or velu.json).
 `);
 }
 
 // ── init ────────────────────────────────────────────────────────────────────────
 
 function init(targetDir: string) {
-  if (existsSync(join(targetDir, "velu.json"))) {
-    console.error("❌ velu.json already exists in this directory.");
+  if (resolveConfigPath(targetDir)) {
+    console.error("❌ docs.json or velu.json already exists in this directory.");
     process.exit(1);
   }
 
-  // velu.json
+  // docs.json
   const config = {
     $schema: "https://raw.githubusercontent.com/aravindc26/velu/main/schema/velu.schema.json",
     theme: "neutral" as const,
@@ -85,13 +96,13 @@ function init(targetDir: string) {
       ],
     },
   };
-  writeFileSync(join(targetDir, "velu.json"), JSON.stringify(config, null, 2) + "\n", "utf-8");
+  writeFileSync(join(targetDir, PRIMARY_CONFIG_NAME), JSON.stringify(config, null, 2) + "\n", "utf-8");
 
   // Example pages
   const pages: Record<string, string> = {
-    "quickstart.md": `# Quickstart\n\nWelcome to your new documentation site!\n\n## Prerequisites\n\n- Node.js 20.9+\n- npm\n\n## Getting Started\n\n1. Edit the markdown files in this directory\n2. Update \`velu.json\` to configure navigation\n3. Run \`velu run\` to start the dev server\n\n\`\`\`bash\nvelu run\n\`\`\`\n\nYour site is live at \`http://localhost:4321\`.\n`,
+    "quickstart.md": `# Quickstart\n\nWelcome to your new documentation site!\n\n## Prerequisites\n\n- Node.js 20.9+\n- npm\n\n## Getting Started\n\n1. Edit the markdown files in this directory\n2. Update \`docs.json\` to configure navigation\n3. Run \`velu run\` to start the dev server\n\n\`\`\`bash\nvelu run\n\`\`\`\n\nYour site is live at \`http://localhost:4321\`.\n`,
     "installation.md": `# Installation\n\nInstall Velu globally:\n\n\`\`\`bash\nnpm install -g @aravindc26/velu\n\`\`\`\n\nOr run directly with npx:\n\n\`\`\`bash\nnpx @aravindc26/velu run\n\`\`\`\n`,
-    "guides/configuration.md": `# Configuration\n\nVelu uses a \`velu.json\` file to define your site's navigation.\n\n## Navigation Structure\n\n- **Tabs** — Top-level horizontal navigation\n- **Groups** — Collapsible sidebar sections within a tab\n- **Pages** — Individual markdown documents\n\n## Example\n\n\`\`\`json\n{\n  "navigation": {\n    "tabs": [\n      {\n        "tab": "Getting Started",\n        "slug": "getting-started",\n        "groups": [\n          {\n            "group": "Basics",\n            "slug": "getting-started",\n            "pages": ["quickstart"]\n          }\n        ]\n      }\n    ]\n  }\n}\n\`\`\`\n`,
+    "guides/configuration.md": `# Configuration\n\nVelu uses a \`docs.json\` file to define your site's navigation.\n\n## Navigation Structure\n\n- **Tabs** — Top-level horizontal navigation\n- **Groups** — Collapsible sidebar sections within a tab\n- **Pages** — Individual markdown documents\n\n## Example\n\n\`\`\`json\n{\n  "navigation": {\n    "tabs": [\n      {\n        "tab": "Getting Started",\n        "slug": "getting-started",\n        "groups": [\n          {\n            "group": "Basics",\n            "slug": "getting-started",\n            "pages": ["quickstart"]\n          }\n        ]\n      }\n    ]\n  }\n}\n\`\`\`\n`,
     "guides/deployment.md": `# Deployment\n\nBuild your site for production:\n\n\`\`\`bash\nvelu build\n\`\`\`\n\nThe output is a static site you can deploy anywhere — Netlify, Vercel, GitHub Pages, etc.\n`,
     "api-reference/overview.md": `# API Overview\n\nThis section covers the API reference for your project.\n\n## Endpoints\n\n| Method | Path | Description |\n|--------|------|-------------|\n| GET | /api/health | Health check |\n| POST | /api/data | Create data |\n`,
     "api-reference/authentication.md": `# Authentication\n\nAll API requests require an API key.\n\n## Headers\n\n\`\`\`\nAuthorization: Bearer YOUR_API_KEY\n\`\`\`\n\n## Getting an API Key\n\nVisit the dashboard to generate your API key.\n`,
@@ -107,7 +118,7 @@ function init(targetDir: string) {
   console.log("  \x1b[36mvelu\x1b[0m  project initialized");
   console.log("");
   console.log("  Created:");
-  console.log("    velu.json");
+  console.log("    docs.json");
   for (const filePath of Object.keys(pages)) {
     console.log(`    ${filePath}`);
   }
@@ -125,7 +136,7 @@ async function lint(docsDir: string) {
   const result = validateVeluConfig(docsDir, SCHEMA_PATH);
 
   if (result.valid) {
-    console.log("✅ velu.json is valid. All referenced pages exist.");
+    console.log("✅ docs.json/velu.json is valid. All referenced pages exist.");
   } else {
     console.error("❌ Validation failed:\n");
     for (const err of result.errors) {
@@ -133,6 +144,51 @@ async function lint(docsDir: string) {
     }
     process.exit(1);
   }
+}
+
+// ── paths ───────────────────────────────────────────────────────────────────────
+
+interface PathEntry {
+  path: string;
+  file: string | null;
+}
+
+async function paths(docsDir: string) {
+  const { collectPages } = await import("./validate.js");
+  const { normalizeConfigNavigation } = await import("./navigation-normalize.js");
+  const { readFileSync, existsSync } = await import("node:fs");
+  const { join } = await import("node:path");
+
+  const configPath = resolveConfigPath(docsDir);
+  if (!configPath) {
+    console.error("❌ docs.json or velu.json not found.");
+    process.exit(1);
+  }
+
+  const raw = JSON.parse(readFileSync(configPath, "utf-8"));
+  const config = normalizeConfigNavigation(raw);
+  const pages = collectPages(config);
+
+  const entries: PathEntry[] = pages.map((pagePath) => {
+    // Check for .mdx first, then .md
+    const mdxPath = join(docsDir, `${pagePath}.mdx`);
+    const mdPath = join(docsDir, `${pagePath}.md`);
+
+    if (existsSync(mdxPath)) {
+      return { path: pagePath, file: `${pagePath}.mdx` };
+    }
+    if (existsSync(mdPath)) {
+      return { path: pagePath, file: `${pagePath}.md` };
+    }
+    return { path: pagePath, file: null };
+  });
+
+  const output = {
+    paths: entries,
+    count: entries.length,
+  };
+
+  console.log(JSON.stringify(output, null, 2));
 }
 
 // ── build ────────────────────────────────────────────────────────────────────────
@@ -197,21 +253,25 @@ if (!command || command === "--help" || command === "-h") {
 
 const docsDir = process.cwd();
 
-// init doesn't require velu.json
+// init doesn't require docs.json
 if (command === "init") {
   init(docsDir);
   process.exit(0);
 }
 
-if (!existsSync(join(docsDir, "velu.json"))) {
-  console.error("❌ No velu.json found in the current directory.");
-  console.error("   Run `velu init` to scaffold a new project, or run from a directory containing velu.json.");
+if (!resolveConfigPath(docsDir)) {
+  console.error("❌ No docs.json or velu.json found in the current directory.");
+  console.error("   Run `velu init` to scaffold a new project, or run from a directory containing docs.json.");
   process.exit(1);
 }
 
 switch (command) {
   case "lint":
     await lint(docsDir);
+    break;
+
+  case "paths":
+    await paths(docsDir);
     break;
 
   case "build":

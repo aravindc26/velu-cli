@@ -305,19 +305,30 @@ function initAssistant() {
     else if (action === 'reset') resetChat();
   });
 
-  // Scroll: hide ask bar at bottom of page
-  window.addEventListener('scroll', () => {
+  // Hide ask bar only when truly near the page bottom.
+  function syncAskBarVisibility() {
     if (isPanelOpen()) return;
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
     const docHeight = document.documentElement.scrollHeight;
     const winHeight = window.innerHeight;
-    if (docHeight <= winHeight + 10) return;
-    if (docHeight - scrollTop - winHeight < 60) {
+    const bottomGap = docHeight - scrollTop - winHeight;
+    const nearBottomThreshold = 8;
+
+    if (docHeight <= winHeight + 2) {
+      askBar.classList.remove('velu-ask-bar-hidden');
+      return;
+    }
+
+    if (bottomGap <= nearBottomThreshold) {
       askBar.classList.add('velu-ask-bar-hidden');
     } else {
       askBar.classList.remove('velu-ask-bar-hidden');
     }
-  }, { passive: true });
+  }
+
+  window.addEventListener('scroll', syncAskBarVisibility, { passive: true });
+  window.addEventListener('resize', syncAskBarVisibility, { passive: true });
+  syncAskBarVisibility();
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && isPanelOpen()) closePanel();

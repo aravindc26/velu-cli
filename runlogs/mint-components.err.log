@@ -1,0 +1,20 @@
+node:fs:1201
+  binding.rmdir(path);
+          ^
+
+Error: EBUSY: resource busy or locked, rmdir 'C:\Users\aravi\deluge\velu-cli\.velu-out'
+    at rmdirSync (node:fs:1201:11)
+    at _rmdirSync (node:internal/fs/rimraf:236:5)
+    at rimrafSync (node:internal/fs/rimraf:194:7)
+    at rmSync (node:fs:1247:10)
+    at build (C:\Users\aravi\deluge\velu-cli\src\build.ts:286:5)
+    at generateProject (C:\Users\aravi\deluge\velu-cli\src\cli.ts:201:3)
+    at async run (C:\Users\aravi\deluge\velu-cli\src\cli.ts:240:18)
+    at async <anonymous> (C:\Users\aravi\deluge\velu-cli\src\cli.ts:288:5) {
+  errno: -4082,
+  code: 'EBUSY',
+  syscall: 'rmdir',
+  path: 'C:\\Users\\aravi\\deluge\\velu-cli\\.velu-out'
+}
+
+Node.js v22.19.0

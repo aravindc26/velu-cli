@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 
 interface PagefindResult {
   url: string;
@@ -19,8 +20,52 @@ interface PagefindResponse {
 
 interface PagefindInstance {
   init: () => Promise<void>;
-  search: (query: string) => Promise<PagefindResponse>;
+  search: (query: string, options?: { filters?: Record<string, string | string[]> }) => Promise<PagefindResponse>;
   destroy: () => void;
+}
+
+interface SearchFilters {
+  language?: string;
+  version?: string;
+  product?: string;
+}
+
+// Extract language and version/product from URL path
+// Format: /[lang]/[version|product]/... or /[version|product]/...
+function extractFiltersFromPath(pathname: string): SearchFilters {
+  const filters: SearchFilters = {};
+  const segments = pathname.split('/').filter(Boolean);
+  
+  // Common language codes (expand as needed)
+  const langCodes = new Set(['en', 'ja', 'es', 'fr', 'de', 'zh', 'ko', 'pt', 'ru', 'ar']);
+  
+  if (segments.length === 0) return filters;
+  
+  // Check if first segment is a language code
+  const firstSeg = segments[0];
+  if (langCodes.has(firstSeg)) {
+    filters.language = firstSeg;
+    // Look for version/product in second segment
+    if (segments.length > 1) {
+      const secondSeg = segments[1];
+      // Version patterns: v1, v2, v1.0, 1.0, etc.
+      if (/^v?\d/.test(secondSeg)) {
+        filters.version = secondSeg;
+      } else {
+        // Could be a product slug
+        filters.product = secondSeg;
+      }
+    }
+  } else {
+    // First segment might be version or product
+    if (/^v?\d/.test(firstSeg)) {
+      filters.version = firstSeg;
+    } else {
+      filters.product = firstSeg;
+    }
+  }
+  
+  return filters;
 }
 
 export function PagefindSearch({
@@ -33,13 +78,27 @@ export function PagefindSearch({
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const pagefindRef = useRef<PagefindInstance | null>(null);
+  const pathname = usePathname();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PagefindResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [available, setAvailable] = useState(true);
+  const [activeFilters, setActiveFilters] = useState<SearchFilters>({});
+
+  // Extract filters from current URL when search opens
+  useEffect(() => {
+    if (open && pathname) {
+      const filters = extractFiltersFromPath(pathname);
+      setActiveFilters(filters);
+    }
+  }, [open, pathname]);
 
   useEffect(() => {
     async function loadPagefind() {
+      if (process.env.NODE_ENV !== 'production') {
+        setAvailable(false);
+        return;
+      }
       try {
         // Bypass bundler resolution — pagefind.js only exists in the static output
         const pf = await new Function('return import("/pagefind/pagefind.js")')();
@@ -72,7 +131,15 @@ export function PagefindSearch({
       }
       setLoading(true);
       try {
-        const response = await pagefindRef.current.search(q);
+        // Build filters for pagefind
+        const filters: Record<string, string> = {};
+        if (activeFilters.language) filters.language = activeFilters.language;
+        if (activeFilters.version) filters.version = activeFilters.version;
+        if (activeFilters.product) filters.product = activeFilters.product;
+
+        const response = await pagefindRef.current.search(q, 
+          Object.keys(filters).length > 0 ? { filters } : undefined
+        );
         const items = await Promise.all(
           response.results.slice(0, 8).map((r) => r.data())
         );
@@ -82,7 +149,7 @@ export function PagefindSearch({
       }
       setLoading(false);
     },
-    []
+    [activeFilters]
   );
 
   return (

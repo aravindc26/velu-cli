@@ -1,6 +1,6 @@
 {
   "name": "@aravindc26/velu",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "A modern documentation site generator powered by Markdown and JSON configuration",
   "type": "module",
   "license": "MIT",

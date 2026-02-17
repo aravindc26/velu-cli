@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, mkdirSync, copyFileSync, cpSync, existsSync, rmSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, cpSync, existsSync, rmSync, readdirSync } from "node:fs";
+import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateThemeCss, resolveThemeName, type VeluColors, type VeluStyling } from "./themes.js";
 import { normalizeConfigNavigation } from "./navigation-normalize.js";
@@ -10,6 +10,16 @@ const __dirname = dirname(__filename);
 const PACKAGED_ENGINE_DIR = join(__dirname, "engine");
 const DEV_ENGINE_DIR = join(__dirname, "..", "src", "engine");
 const ENGINE_DIR = existsSync(DEV_ENGINE_DIR) ? DEV_ENGINE_DIR : PACKAGED_ENGINE_DIR;
+const PRIMARY_CONFIG_NAME = "docs.json";
+const LEGACY_CONFIG_NAME = "velu.json";
+
+function resolveConfigPath(docsDir: string): string {
+  const primary = join(docsDir, PRIMARY_CONFIG_NAME);
+  if (existsSync(primary)) return primary;
+  const legacy = join(docsDir, LEGACY_CONFIG_NAME);
+  if (existsSync(legacy)) return legacy;
+  throw new Error(`No ${PRIMARY_CONFIG_NAME} or ${LEGACY_CONFIG_NAME} found in ${docsDir}`);
+}
 
 // ── Types (used only by build.ts for page copying) ─────────────────────────────
 
@@ -21,12 +31,14 @@ interface VeluLink {
   href: string;
   label: string;
   icon?: string;
+  iconType?: string;
 }
 
 interface VeluAnchor {
   anchor: string;
   href?: string;
   icon?: string;
+  iconType?: string;
   color?: {
     light: string;
     dark: string;
@@ -39,12 +51,14 @@ interface VeluGlobalTab {
   tab: string;
   href: string;
   icon?: string;
+  iconType?: string;
 }
 
 interface VeluGroup {
   group: string;
   slug: string;
   icon?: string;
+  iconType?: string;
   expanded?: boolean;
   description?: string;
   hidden?: boolean;
@@ -54,6 +68,7 @@ interface VeluGroup {
 interface VeluMenuItem {
   item: string;
   icon?: string;
+  iconType?: string;
   groups?: VeluGroup[];
   pages?: (string | VeluSeparator | VeluLink)[];
 }
@@ -62,6 +77,7 @@ interface VeluTab {
   tab: string;
   slug: string;
   icon?: string;
+  iconType?: string;
   href?: string;
   pages?: (string | VeluSeparator | VeluLink)[];
   groups?: VeluGroup[];
@@ -76,6 +92,7 @@ interface VeluLanguageNav {
 interface VeluProductNav {
   product: string;
   icon?: string;
+  iconType?: string;
   tabs?: VeluTab[];
   pages?: (string | VeluSeparator | VeluLink)[];
 }
@@ -120,9 +137,41 @@ function isGroup(item: unknown): item is VeluGroup {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function loadConfig(docsDir: string): VeluConfig {
-  const raw = readFileSync(join(docsDir, "velu.json"), "utf-8");
+  const raw = readFileSync(resolveConfigPath(docsDir), "utf-8");
   const parsed = JSON.parse(raw) as VeluConfig;
   return normalizeConfigNavigation(parsed);
+}
+
+const STATIC_EXTENSIONS = new Set([
+  ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico", ".avif",
+  ".mp4", ".webm", ".ogg", ".mp3", ".wav", ".pdf", ".txt",
+]);
+
+function copyStaticAssets(docsDir: string, publicDir: string) {
+  function walk(dir: string) {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      if (entry.name === "node_modules") continue;
+      const srcPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(srcPath);
+        continue;
+      }
+
+      const ext = entry.name.includes(".")
+        ? `.${entry.name.split(".").pop()!.toLowerCase()}`
+        : "";
+      if (!STATIC_EXTENSIONS.has(ext)) continue;
+
+      const rel = relative(docsDir, srcPath);
+      const destPath = join(publicDir, rel);
+      mkdirSync(dirname(destPath), { recursive: true });
+      copyFileSync(srcPath, destPath);
+    }
+  }
+
+  walk(docsDir);
 }
 
 function pageLabelFromSlug(slug: string): string {
@@ -208,6 +257,7 @@ function buildArtifacts(config: VeluConfig): BuildArtifacts {
     };
 
     if (group.icon) groupMeta.icon = group.icon;
+    if (group.iconType) groupMeta.iconType = group.iconType;
     if (group.description) groupMeta.description = group.description;
 
     metaFiles.push({ dir: groupDir, data: groupMeta });
@@ -244,6 +294,7 @@ function buildArtifacts(config: VeluConfig): BuildArtifacts {
     };
 
     if (tab.icon) tabMeta.icon = tab.icon;
+    if (tab.iconType) tabMeta.iconType = tab.iconType;
 
     metaFiles.push({ dir: tab.slug, data: tabMeta });
   }
@@ -258,7 +309,9 @@ function buildArtifacts(config: VeluConfig): BuildArtifacts {
 // ── Build ──────────────────────────────────────────────────────────────────────
 
 function build(docsDir: string, outDir: string) {
-  console.log(`📖 Loading velu.json from: ${docsDir}`);
+  const configPath = resolveConfigPath(docsDir);
+  const configName = configPath.endsWith(PRIMARY_CONFIG_NAME) ? PRIMARY_CONFIG_NAME : LEGACY_CONFIG_NAME;
+  console.log(`📖 Loading ${configName} from: ${docsDir}`);
   const config = loadConfig(docsDir);
 
   if (existsSync(outDir)) {
@@ -275,9 +328,14 @@ function build(docsDir: string, outDir: string) {
   mkdirSync(join(outDir, "content", "docs"), { recursive: true });
   mkdirSync(join(outDir, "public"), { recursive: true });
 
-  // ── 3. Copy velu.json into the generated project ─────────────────────────
-  copyFileSync(join(docsDir, "velu.json"), join(outDir, "velu.json"));
-  console.log("📋 Copied velu.json");
+  // ── 3. Copy config into the generated project ────────────────────────────
+  copyFileSync(configPath, join(outDir, PRIMARY_CONFIG_NAME));
+  copyFileSync(configPath, join(outDir, LEGACY_CONFIG_NAME));
+  console.log(`📋 Copied ${configName} as ${PRIMARY_CONFIG_NAME} (and legacy ${LEGACY_CONFIG_NAME})`);
+
+  // ── 3b. Copy static assets from docs project into public/ ─────────────────
+  copyStaticAssets(docsDir, join(outDir, "public"));
+  console.log("🖼️  Copied static assets");
 
   // ── 4. Build content + metadata artifacts ────────────────────────────────
   const contentDir = join(outDir, "content", "docs");
@@ -317,11 +375,17 @@ function build(docsDir: string, outDir: string) {
       writeFileSync(metaPath, JSON.stringify(meta.data, null, 2) + "\n", "utf-8");
     }
 
-    // Copy pages using explicit source paths from velu.json
+    // Copy pages using explicit source paths from docs.json/velu.json
     for (const { src, dest } of artifacts.pageMap) {
-      const srcPath = join(docsDir, `${src}.md`);
+      // Check for .mdx first, then .md
+      let srcPath = join(docsDir, `${src}.mdx`);
+      let ext = '.mdx';
       if (!existsSync(srcPath)) {
-        console.warn(`⚠️  Missing page source: ${src}.md (language: ${langCode})`);
+        srcPath = join(docsDir, `${src}.md`);
+        ext = '.md';
+      }
+      if (!existsSync(srcPath)) {
+        console.warn(`⚠️  Missing page source: ${src}${ext} (language: ${langCode})`);
         continue;
       }
       const destPath = join(contentDir, storagePrefix ? `${storagePrefix}/${dest}.mdx` : `${dest}.mdx`);

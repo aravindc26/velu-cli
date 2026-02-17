@@ -1,6 +1,14 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { normalizeConfigNavigation } from './navigation-normalize';
+const PRIMARY_CONFIG_NAME = 'docs.json';
+const LEGACY_CONFIG_NAME = 'velu.json';
+
+function resolveConfigPath(cwd: string): string {
+  const primary = resolve(cwd, PRIMARY_CONFIG_NAME);
+  if (existsSync(primary)) return primary;
+  return resolve(cwd, LEGACY_CONFIG_NAME);
+}
 
 interface VeluTab {
   tab: string;
@@ -29,6 +37,7 @@ interface VeluAnchor {
   anchor: string;
   href?: string;
   icon?: string;
+  iconType?: string;
   color?: {
     light: string;
     dark: string;
@@ -48,11 +57,30 @@ interface VeluLanguageNav {
   tabs: VeluTab[];
 }
 
+interface VeluProductNav {
+  product: string;
+  description?: string;
+  icon?: string;
+  iconType?: string;
+  hidden?: boolean;
+  href?: string;
+}
+
 interface VeluVersionNav {
   version: string;
   default?: boolean;
   hidden?: boolean;
   href?: string;
+}
+
+export interface VeluProductOption {
+  product: string;
+  slug: string;
+  description?: string;
+  icon?: string;
+  iconType?: string;
+  tabSlugs: string[];
+  defaultPath: string;
 }
 
 export interface VeluVersionOption {
@@ -64,11 +92,15 @@ export interface VeluVersionOption {
 }
 
 interface VeluConfig {
+  icons?: {
+    library?: string;
+  };
   appearance?: 'system' | 'light' | 'dark';
   languages?: string[];
   navigation: {
     tabs?: VeluTab[];
     languages?: VeluLanguageNav[];
+    products?: VeluProductNav[];
     versions?: VeluVersionNav[];
     anchors?: VeluAnchor[];
     global?: {
@@ -82,7 +114,7 @@ let cachedConfig: VeluConfig | null = null;
 
 function loadVeluConfig(): VeluConfig {
   if (cachedConfig) return cachedConfig;
-  const configPath = resolve(process.cwd(), 'velu.json');
+  const configPath = resolveConfigPath(process.cwd());
   const raw = readFileSync(configPath, 'utf-8');
   cachedConfig = normalizeConfigNavigation(JSON.parse(raw)) as VeluConfig;
   return cachedConfig;
@@ -192,6 +224,42 @@ export function getLanguages(): string[] {
   return config.languages ?? [];
 }
 
+export function getProductOptions(): VeluProductOption[] {
+  const config = loadVeluConfig();
+  const products = (config.navigation.products ?? []).filter((p) => !p.hidden);
+  if (products.length === 0) return [];
+
+  const allTabs = config.navigation.tabs ?? [];
+
+  return products.map((product, index) => {
+    const prefix = slugify(product.product, `product-${index + 1}`);
+    const productTabs = allTabs.filter((tab) => {
+      const slug = tab.slug ?? '';
+      return slug === prefix || slug.startsWith(`${prefix}/`);
+    });
+
+    const tabSlugs = productTabs
+      .map((tab) => tab.slug)
+      .filter((slug): slug is string => typeof slug === 'string' && slug.length > 0);
+
+    const firstTab = productTabs[0];
+    const firstPage = firstTab ? findFirstPageInTab(firstTab) : undefined;
+    const defaultPath = firstTab
+      ? (firstPage ? `/${firstTab.slug}/${pageBasename(firstPage)}` : `/${firstTab.slug}`)
+      : (product.href ?? '/');
+
+    return {
+      product: product.product,
+      slug: prefix,
+      description: product.description,
+      icon: product.icon,
+      iconType: product.iconType,
+      tabSlugs,
+      defaultPath,
+    };
+  });
+}
+
 export function getVersionOptions(): VeluVersionOption[] {
   const config = loadVeluConfig();
   const versions = (config.navigation.versions ?? []).filter((v) => !v.hidden);
@@ -201,10 +269,9 @@ export function getVersionOptions(): VeluVersionOption[] {
 
   const baseEntries = versions.map((version, index) => {
     const prefix = slugify(version.version, `version-${index + 1}`);
-    const prefixed = `${prefix}-`;
     const versionTabs = allTabs.filter((tab) => {
       const slug = tab.slug ?? '';
-      return slug === prefix || slug.startsWith(prefixed);
+      return slug === prefix || slug.startsWith(`${prefix}/`);
     });
 
     const tabSlugs = versionTabs
@@ -251,4 +318,12 @@ export function getAppearance(): 'system' | 'light' | 'dark' {
   const appearance = loadVeluConfig().appearance;
   if (appearance === 'light' || appearance === 'dark') return appearance;
   return 'system';
+}
+
+export type VeluIconLibrary = 'fontawesome' | 'lucide' | 'tabler';
+
+export function getIconLibrary(): VeluIconLibrary {
+  const raw = loadVeluConfig().icons?.library;
+  if (raw === 'lucide' || raw === 'tabler' || raw === 'fontawesome') return raw;
+  return 'fontawesome';
 }

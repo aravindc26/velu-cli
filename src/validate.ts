@@ -3,6 +3,16 @@ import addFormats from "ajv-formats";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { normalizeConfigNavigation } from "./navigation-normalize.js";
+const PRIMARY_CONFIG_NAME = "docs.json";
+const LEGACY_CONFIG_NAME = "velu.json";
+
+function resolveConfigPath(docsDir: string): string | null {
+  const primary = join(docsDir, PRIMARY_CONFIG_NAME);
+  if (existsSync(primary)) return primary;
+  const legacy = join(docsDir, LEGACY_CONFIG_NAME);
+  if (existsSync(legacy)) return legacy;
+  return null;
+}
 
 interface VeluSeparator {
   separator: string;
@@ -12,12 +22,14 @@ interface VeluLink {
   href: string;
   label: string;
   icon?: string;
+  iconType?: string;
 }
 
 interface VeluAnchor {
   anchor: string;
   href?: string;
   icon?: string;
+  iconType?: string;
   color?: {
     light: string;
     dark: string;
@@ -30,12 +42,14 @@ interface VeluGlobalTab {
   tab: string;
   href: string;
   icon?: string;
+  iconType?: string;
 }
 
 interface VeluGroup {
   group: string;
   slug?: string;
   icon?: string;
+  iconType?: string;
   tag?: string;
   expanded?: boolean;
   description?: string;
@@ -46,6 +60,7 @@ interface VeluGroup {
 interface VeluMenuItem {
   item: string;
   icon?: string;
+  iconType?: string;
   groups?: VeluGroup[];
   pages?: (string | VeluSeparator | VeluLink)[];
 }
@@ -54,6 +69,7 @@ interface VeluTab {
   tab: string;
   slug?: string;
   icon?: string;
+  iconType?: string;
   href?: string;
   pages?: (string | VeluSeparator | VeluLink)[];
   groups?: VeluGroup[];
@@ -68,6 +84,7 @@ interface VeluLanguageNav {
 interface VeluProductNav {
   product: string;
   icon?: string;
+  iconType?: string;
   tabs?: VeluTab[];
   pages?: (string | VeluSeparator | VeluLink)[];
 }
@@ -79,6 +96,9 @@ interface VeluVersionNav {
 
 interface VeluConfig {
   $schema?: string;
+  icons?: {
+    library?: "fontawesome" | "lucide" | "tabler";
+  };
   theme?: string;
   colors?: { primary?: string; light?: string; dark?: string };
   appearance?: "system" | "light" | "dark";
@@ -150,9 +170,12 @@ function collectPages(config: VeluConfig): string[] {
 function validateVeluConfig(docsDir: string, schemaPath: string): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
-  const configPath = join(docsDir, "velu.json");
-  if (!existsSync(configPath)) {
-    return { valid: false, errors: [`velu.json not found at ${configPath}`] };
+  const configPath = resolveConfigPath(docsDir);
+  if (!configPath) {
+    return {
+      valid: false,
+      errors: [`docs.json or velu.json not found at ${join(docsDir, PRIMARY_CONFIG_NAME)}`],
+    };
   }
 
   if (!existsSync(schemaPath)) {
@@ -176,12 +199,13 @@ function validateVeluConfig(docsDir: string, schemaPath: string): { valid: boole
 
   const config = normalizeConfigNavigation(rawConfig);
 
-  // Validate that all referenced .md files exist
+  // Validate that all referenced page files exist (.mdx or .md)
   const pages = collectPages(config);
   for (const page of pages) {
+    const mdxPath = join(docsDir, `${page}.mdx`);
     const mdPath = join(docsDir, `${page}.md`);
-    if (!existsSync(mdPath)) {
-      errors.push(`Missing page: ${page}.md (expected at ${mdPath})`);
+    if (!existsSync(mdxPath) && !existsSync(mdPath)) {
+      errors.push(`Missing page: ${page}.md or ${page}.mdx (expected at ${mdPath})`);
     }
   }
 

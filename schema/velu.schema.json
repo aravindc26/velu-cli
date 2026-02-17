@@ -44,6 +44,20 @@
       "enum": ["system", "light", "dark"],
       "default": "system"
     },
+    "icons": {
+      "type": "object",
+      "description": "Icon settings compatible with Mint-style configuration.",
+      "properties": {
+        "library": {
+          "type": "string",
+          "description": "Icon library used for named icon strings.",
+          "enum": ["fontawesome", "lucide", "tabler"],
+          "default": "fontawesome"
+        }
+      },
+      "required": ["library"],
+      "additionalProperties": false
+    },
     "styling": {
       "type": "object",
       "description": "Fine-grained styling options.",
@@ -227,6 +241,10 @@
           "type": "string",
           "description": "Icon identifier for the group."
         },
+        "iconType": {
+          "type": "string",
+          "description": "Icon style hint (primarily for Font Awesome)."
+        },
         "tag": {
           "type": "string",
           "description": "Optional badge/tag label displayed next to the group name."
@@ -277,6 +295,10 @@
         "icon": {
           "type": "string",
           "description": "Icon identifier for the tab."
+        },
+        "iconType": {
+          "type": "string",
+          "description": "Icon style hint (primarily for Font Awesome)."
         },
         "href": {
           "$ref": "#/definitions/href"
@@ -365,6 +387,10 @@
           "type": "string",
           "description": "Icon identifier for the dropdown."
         },
+        "iconType": {
+          "type": "string",
+          "description": "Icon style hint (primarily for Font Awesome)."
+        },
         "href": {
           "$ref": "#/definitions/href"
         },
@@ -438,6 +464,10 @@
           "type": "string",
           "description": "Icon identifier for the menu item."
         },
+        "iconType": {
+          "type": "string",
+          "description": "Icon style hint (primarily for Font Awesome)."
+        },
         "pages": {
           "type": "array",
           "description": "Pages directly under this menu item.",
@@ -490,6 +520,10 @@
         "icon": {
           "type": "string",
           "description": "Icon identifier for the link."
+        },
+        "iconType": {
+          "type": "string",
+          "description": "Icon style hint (primarily for Font Awesome)."
         }
       },
       "additionalProperties": false
@@ -556,6 +590,10 @@
           "type": "string",
           "description": "Icon identifier for the anchor."
         },
+        "iconType": {
+          "type": "string",
+          "description": "Icon style hint (primarily for Font Awesome)."
+        },
         "color": {
           "type": "object",
           "description": "Optional light/dark color hints for displaying this anchor.",
@@ -620,6 +658,10 @@
         "icon": {
           "type": "string",
           "description": "Icon identifier for the product."
+        },
+        "iconType": {
+          "type": "string",
+          "description": "Icon style hint (primarily for Font Awesome)."
         },
         "name": {
           "type": "string",
@@ -808,6 +850,10 @@
         "icon": {
           "type": "string",
           "description": "Icon identifier for the global tab."
+        },
+        "iconType": {
+          "type": "string",
+          "description": "Icon style hint (primarily for Font Awesome)."
         }
       },
       "additionalProperties": false

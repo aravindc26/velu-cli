@@ -1,6 +1,14 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { normalizeConfigNavigation } from '../../lib/navigation-normalize';
+const PRIMARY_CONFIG_NAME = 'docs.json';
+const LEGACY_CONFIG_NAME = 'velu.json';
+
+function resolveConfigPath(cwd: string): string {
+  const primary = resolve(cwd, PRIMARY_CONFIG_NAME);
+  if (existsSync(primary)) return primary;
+  return resolve(cwd, LEGACY_CONFIG_NAME);
+}
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -82,7 +90,7 @@ let _cachedConfig: VeluConfig | null = null;
 
 export function loadVeluConfig(): VeluConfig {
   if (_cachedConfig) return _cachedConfig;
-  const configPath = resolve(process.cwd(), 'velu.json');
+  const configPath = resolveConfigPath(process.cwd());
   const raw = readFileSync(configPath, 'utf-8');
   _cachedConfig = normalizeConfigNavigation(JSON.parse(raw));
   return _cachedConfig!;
@@ -145,7 +153,7 @@ function firstGroupPage(group: VeluGroup, tabSlug: string): string | undefined {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
-/** Build the full Starlight sidebar array from velu.json */
+/** Build the full Starlight sidebar array from docs.json/velu.json */
 export function getSidebar(): any[] {
   const config = loadVeluConfig();
   const sidebar: any[] = [];

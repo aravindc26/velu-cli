@@ -9,7 +9,7 @@ import {
 } from 'fumadocs-ui/layouts/docs/page';
 import { getMDXComponents } from '@/mdx-components';
 import { source } from '@/lib/source';
-import { getLanguages } from '@/lib/velu';
+import { getLanguages, getVersionOptions, getProductOptions } from '@/lib/velu';
 import { CopyPageButton } from '@/components/copy-page';
 
 interface RouteParams {
@@ -34,9 +34,34 @@ function resolveLocaleSlug(slugInput: string[] | undefined) {
   };
 }
 
+function resolveContextFromSlug(slugInput: string[] | undefined) {
+  const languages = getLanguages();
+  const versions = getVersionOptions();
+  const products = getProductOptions();
+  const slug = slugInput ?? [];
+  
+  // Check for language prefix
+  const firstSeg = slug[0];
+  const hasLocalePrefix = languages.includes(firstSeg ?? '');
+  const locale = hasLocalePrefix ? firstSeg! : (languages[0] ?? 'en');
+  const remainingSlug = hasLocalePrefix ? slug.slice(1) : slug;
+  
+  // Check for version/product in remaining slug
+  const contextSeg = remainingSlug[0] ?? '';
+  const version = versions.find((v) => v.slug === contextSeg);
+  const product = products.find((p) => p.slug === contextSeg);
+  
+  return {
+    locale,
+    version: version?.slug,
+    product: product?.slug,
+  };
+}
+
 export default async function Page({ params }: PageProps) {
   const resolvedParams = await params;
   const { locale, pageSlug } = resolveLocaleSlug(resolvedParams.slug);
+  const { locale: filterLocale, version, product } = resolveContextFromSlug(resolvedParams.slug);
   const hasI18n = getLanguages().length > 1;
 
   const page = hasI18n ? source.getPage(pageSlug, locale) : source.getPage(pageSlug);
@@ -45,9 +70,29 @@ export default async function Page({ params }: PageProps) {
 
   const MDX = page.data.body;
 
+  // Build pagefind filter attributes
+  const metaAttrs: string[] = [`title:${page.data.title}`];
+  const filterAttrs: string[] = [];
+  if (hasI18n) {
+    metaAttrs.push(`language:${filterLocale}`);
+    filterAttrs.push(`language:${filterLocale}`);
+  }
+  if (version) {
+    metaAttrs.push(`version:${version}`);
+    filterAttrs.push(`version:${version}`);
+  }
+  if (product) {
+    metaAttrs.push(`product:${product}`);
+    filterAttrs.push(`product:${product}`);
+  }
+
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
-      <div data-pagefind-body data-pagefind-meta={`title:${page.data.title}`}>
+      <div
+        data-pagefind-body
+        data-pagefind-meta={metaAttrs.join(',')}
+        data-pagefind-filter={filterAttrs.length > 0 ? filterAttrs.join(',') : undefined}
+      >
         <div className="velu-title-row">
           <DocsTitle>{page.data.title}</DocsTitle>
           <CopyPageButton />
