@@ -54,22 +54,23 @@ function resolveCurrentProduct(slugInput: string[] | undefined, products: VeluPr
   return products.find((p) => p.slug === firstSeg) ?? products[0];
 }
 
-function renderIconsInTree(node: unknown, iconLibrary: 'fontawesome' | 'lucide' | 'tabler'): unknown {
-  if (Array.isArray(node)) return node.map((item) => renderIconsInTree(item, iconLibrary));
+function renderIconsInTree<T>(node: T, iconLibrary: 'fontawesome' | 'lucide' | 'tabler'): T {
+  if (Array.isArray(node)) return node.map((item) => renderIconsInTree(item, iconLibrary)) as T;
   if (typeof node !== 'object' || node === null) return node;
 
   const out: Record<string, unknown> = {};
+  const nodeWithIconType = node as { iconType?: unknown };
   for (const [key, value] of Object.entries(node)) {
     if (key === 'icon' && typeof value === 'string') {
-      const iconType = typeof (node as { iconType?: unknown }).iconType === 'string'
-        ? ((node as { iconType: string }).iconType)
+      const iconType = typeof nodeWithIconType.iconType === 'string'
+        ? nodeWithIconType.iconType
         : undefined;
       out[key] = <VeluIcon name={value} iconType={iconType} library={iconLibrary} fallback={false} />;
       continue;
     }
     out[key] = renderIconsInTree(value, iconLibrary);
   }
-  return out;
+  return out as T;
 }
 
 export default async function SlugLayout({ children, params }: SlugLayoutProps) {

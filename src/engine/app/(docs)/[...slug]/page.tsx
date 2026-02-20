@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
 import {
   DocsBody,
@@ -11,6 +13,7 @@ import { getMDXComponents } from '@/mdx-components';
 import { source } from '@/lib/source';
 import { getLanguages, getVersionOptions, getProductOptions } from '@/lib/velu';
 import { CopyPageButton } from '@/components/copy-page';
+import { TocExamples } from '@/components/toc-examples';
 
 interface RouteParams {
   slug?: string[];
@@ -18,6 +21,24 @@ interface RouteParams {
 
 interface PageProps {
   params: Promise<RouteParams>;
+}
+
+async function loadMarkdownForSlug(slug: string[], locale: string, hasI18n: boolean): Promise<string | undefined> {
+  const rel = slug.join('/');
+  const roots = hasI18n
+    ? [join(process.cwd(), 'content', 'docs', locale), join(process.cwd(), 'content', 'docs')]
+    : [join(process.cwd(), 'content', 'docs')];
+  const paths = roots.flatMap((root) => [join(root, `${rel}.md`), join(root, `${rel}.mdx`)]);
+
+  for (const filePath of paths) {
+    try {
+      return await readFile(filePath, 'utf-8');
+    } catch {
+      // ignore and continue
+    }
+  }
+
+  return undefined;
 }
 
 function resolveLocaleSlug(slugInput: string[] | undefined) {
@@ -69,6 +90,9 @@ export default async function Page({ params }: PageProps) {
   if (!page) notFound();
 
   const MDX = page.data.body;
+  const sourceMarkdown = await loadMarkdownForSlug(pageSlug, locale, hasI18n);
+  const hasPanelExamples = typeof sourceMarkdown === 'string'
+    && /<(?:Panel|RequestExample|ResponseExample)(?:\s|>)/.test(sourceMarkdown);
 
   // Build pagefind filter attributes
   const metaAttrs: string[] = [`title:${page.data.title}`];
@@ -87,12 +111,17 @@ export default async function Page({ params }: PageProps) {
   }
 
   return (
-    <DocsPage toc={page.data.toc} full={page.data.full}>
+    <DocsPage
+      toc={page.data.toc}
+      full={page.data.full}
+      tableOfContent={hasPanelExamples ? { header: <div className="velu-toc-panel-rail" /> } : undefined}
+    >
       <div
         data-pagefind-body
         data-pagefind-meta={metaAttrs.join(',')}
         data-pagefind-filter={filterAttrs.length > 0 ? filterAttrs.join(',') : undefined}
       >
+        <TocExamples />
         <div className="velu-title-row">
           <DocsTitle>{page.data.title}</DocsTitle>
           <CopyPageButton />
@@ -126,8 +155,7 @@ export async function generateStaticParams() {
     return true;
   });
 
-  // Include root variants for optional catch-all [[...slug]] in export mode.
-  return [{}, { slug: undefined }, { slug: [] }, ...nonRoot];
+  return nonRoot;
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {

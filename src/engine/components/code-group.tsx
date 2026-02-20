@@ -2,6 +2,25 @@
 
 import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
+const VELU_TAB_SYNC_EVENT = 'velu:tab-sync';
+const VELU_TAB_SYNC_KEY = '__veluTabSyncLabel';
+
+function normalizeSyncLabel(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function readSharedSyncLabel(): string | null {
+  if (typeof window === 'undefined') return null;
+  const value = (window as any)[VELU_TAB_SYNC_KEY];
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function broadcastSyncLabel(label: string) {
+  if (typeof window === 'undefined') return;
+  (window as any)[VELU_TAB_SYNC_KEY] = label;
+  window.dispatchEvent(new CustomEvent(VELU_TAB_SYNC_EVENT, { detail: { label } }));
+}
+
 function findNestedProp(node: any, key: string): string | undefined {
   if (!node) return undefined;
   if (Array.isArray(node)) {
@@ -12,9 +31,10 @@ function findNestedProp(node: any, key: string): string | undefined {
     return undefined;
   }
   if (!isValidElement(node)) return undefined;
-  const direct = node.props?.[key];
+  const props = (node as ReactElement<Record<string, unknown>>).props;
+  const direct = props?.[key];
   if (typeof direct === 'string' && direct.trim()) return direct.trim();
-  return findNestedProp(node.props?.children, key);
+  return findNestedProp(props?.children, key);
 }
 
 function findNestedClassName(node: any): string | undefined {
@@ -27,24 +47,26 @@ function findNestedClassName(node: any): string | undefined {
     return undefined;
   }
   if (!isValidElement(node)) return undefined;
-  if (typeof node.props?.className === 'string' && node.props.className) {
-    return node.props.className;
+  const props = (node as ReactElement<Record<string, unknown>>).props;
+  if (typeof props?.className === 'string' && props.className) {
+    return props.className;
   }
-  return findNestedClassName(node.props?.children);
+  return findNestedClassName(props?.children);
 }
 
 function stripTitleProps(node: ReactNode): ReactNode {
   if (Array.isArray(node)) return node.map((item) => stripTitleProps(item));
   if (!isValidElement(node)) return node;
+  const props = (node as ReactElement<Record<string, unknown>>).props;
 
   const nextProps: Record<string, unknown> = {};
-  if (node.props?.children !== undefined) {
-    nextProps.children = stripTitleProps(node.props.children);
+  if (props?.children !== undefined) {
+    nextProps.children = stripTitleProps(props.children as ReactNode);
   }
-  if ('title' in (node.props ?? {})) {
+  if ('title' in (props ?? {})) {
     nextProps.title = undefined;
   }
-  if ('data-title' in (node.props ?? {})) {
+  if ('data-title' in (props ?? {})) {
     nextProps['data-title'] = undefined;
   }
 
@@ -80,22 +102,39 @@ function languageName(language: string | undefined): string | undefined {
 }
 
 function languageFromLabel(label: string): string | undefined {
-  const ext = label.toLowerCase().match(/\.([a-z0-9_+-]+)$/)?.[1];
-  if (!ext) return undefined;
   const map: Record<string, string> = {
     js: 'javascript',
     jsx: 'javascript',
+    javascript: 'javascript',
+    node: 'javascript',
     ts: 'typescript',
     tsx: 'typescript',
+    typescript: 'typescript',
     py: 'python',
+    python: 'python',
     java: 'java',
+    ruby: 'ruby',
     rb: 'ruby',
+    shell: 'shell',
+    bash: 'shell',
     sh: 'shell',
     yml: 'yaml',
     yaml: 'yaml',
+    mdx: 'markdown',
     md: 'markdown',
   };
-  return map[ext] ?? ext;
+  const trimmed = label.trim().toLowerCase();
+  if (!trimmed) return undefined;
+
+  if (map[trimmed]) return map[trimmed];
+
+  const baseNoExt = trimmed.replace(/\.[a-z0-9_+-]+$/, '');
+  if (map[baseNoExt]) return map[baseNoExt];
+
+  const ext = trimmed.match(/\.([a-z0-9_+-]+)$/)?.[1];
+  if (ext && map[ext]) return map[ext];
+
+  return undefined;
 }
 
 function languageAbbr(language: string | undefined): string {
@@ -159,7 +198,7 @@ function getCodeLabel(block: any, index: number): string {
 
   const cls = findNestedClassName(block) || block?.props?.className || '';
   const language = languageFromClassName(cls);
-  if (language) return language;
+  if (language) return languageName(normalizeLanguage(language)) ?? language;
 
   return `Code ${index + 1}`;
 }
@@ -169,26 +208,34 @@ function getCodeLanguage(block: any): string | undefined {
   return languageFromClassName(cls);
 }
 
-export function VeluCodeGroup({ children, className, dropdown }: any) {
+export function VeluCodeGroup({ children, className, dropdown, items, labels: labelItems }: any) {
   const blocks = useMemo(
     () => Children.toArray(children).filter((child) => isValidElement(child) && child.type !== 'br') as any[],
     [children],
   );
+  const explicitLabels = useMemo(() => {
+    const source = Array.isArray(items) ? items : Array.isArray(labelItems) ? labelItems : [];
+    return source.map((value) => String(value));
+  }, [items, labelItems]);
 
-  const labels = useMemo(() => blocks.map((block, index) => getCodeLabel(block, index)), [blocks]);
+  const blockLabels = useMemo(
+    () => blocks.map((block, index) => explicitLabels[index] ?? getCodeLabel(block, index)),
+    [blocks, explicitLabels],
+  );
   const cleanedBlocks = useMemo(() => blocks.map((block) => stripTitleProps(block)), [blocks]);
   const codeMeta = useMemo(
     () => blocks.map((block, index) => {
-      const label = getCodeLabel(block, index);
-      const language = normalizeLanguage(getCodeLanguage(block) ?? languageFromLabel(label));
+      const label = explicitLabels[index] ?? getCodeLabel(block, index);
+      const resolvedLanguage = getCodeLanguage(block) ?? languageFromLabel(label);
+      const language = normalizeLanguage(resolvedLanguage);
       return {
         label,
         language,
-        languageLabel: languageName(language) ?? label,
+        languageLabel: resolvedLanguage ? (languageName(language) ?? label) : label,
         abbr: languageAbbr(language),
       };
     }),
-    [blocks],
+    [blocks, explicitLabels],
   );
 
   const [activeIndex, setActiveIndex] = useState(0);
@@ -207,6 +254,29 @@ export function VeluCodeGroup({ children, className, dropdown }: any) {
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [menuOpen]);
 
+  useEffect(() => {
+    const syncLabels = codeMeta.map((item) => item.languageLabel);
+    if (syncLabels.length === 0) return;
+
+    const applyLabel = (label: string) => {
+      const target = normalizeSyncLabel(label);
+      const idx = syncLabels.findIndex((item) => normalizeSyncLabel(item) === target);
+      if (idx >= 0) setActiveIndex(idx);
+    };
+
+    const existing = readSharedSyncLabel();
+    if (existing) applyLabel(existing);
+
+    const onSync = (event: Event) => {
+      const detail = (event as CustomEvent<{ label?: string }>).detail;
+      if (!detail?.label) return;
+      applyLabel(detail.label);
+    };
+
+    window.addEventListener(VELU_TAB_SYNC_EVENT, onSync);
+    return () => window.removeEventListener(VELU_TAB_SYNC_EVENT, onSync);
+  }, [codeMeta]);
+
   if (blocks.length <= 1) {
     return <div className={['velu-code-group', className].filter(Boolean).join(' ')}>{children}</div>;
   }
@@ -222,7 +292,10 @@ export function VeluCodeGroup({ children, className, dropdown }: any) {
               role="tab"
               aria-selected={clampedIndex === index}
               className={['velu-code-group-tab-btn', clampedIndex === index ? 'is-active' : ''].filter(Boolean).join(' ')}
-              onClick={() => setActiveIndex(index)}
+              onClick={() => {
+                setActiveIndex(index);
+                if (item.languageLabel) broadcastSyncLabel(item.languageLabel);
+              }}
             >
               <LanguageIcon language={item.language} label={item.languageLabel} abbr={item.abbr} />
               <span>{item.label}</span>
@@ -244,7 +317,7 @@ export function VeluCodeGroup({ children, className, dropdown }: any) {
               label={codeMeta[clampedIndex]?.languageLabel ?? 'Text'}
               abbr={codeMeta[clampedIndex]?.abbr ?? 'TX'}
             />
-            <span>{codeMeta[clampedIndex]?.label ?? labels[clampedIndex]}</span>
+            <span>{codeMeta[clampedIndex]?.label ?? blockLabels[clampedIndex]}</span>
           </span>
           <div className="velu-code-group-select-wrap" ref={menuRef}>
             <button
@@ -273,6 +346,7 @@ export function VeluCodeGroup({ children, className, dropdown }: any) {
                     className={['velu-code-group-select-item', clampedIndex === index ? 'is-active' : ''].filter(Boolean).join(' ')}
                     onClick={() => {
                       setActiveIndex(index);
+                      if (item.languageLabel) broadcastSyncLabel(item.languageLabel);
                       setMenuOpen(false);
                     }}
                   >

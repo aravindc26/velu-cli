@@ -1,5 +1,5 @@
 import { resolve, join, dirname, delimiter } from "node:path";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -213,9 +213,41 @@ async function buildStatic(outDir: string, docsDir: string) {
   });
 }
 
+function exportMarkdownRoutes(outDir: string) {
+  const distDir = join(outDir, "dist");
+  const mdRouteRoot = join(distDir, "md-file");
+  if (!existsSync(mdRouteRoot)) return;
+
+  let copied = 0;
+
+  function walk(relDir: string) {
+    const absDir = join(mdRouteRoot, relDir);
+    const entries = readdirSync(absDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const relPath = relDir ? join(relDir, entry.name) : entry.name;
+      if (entry.isDirectory()) {
+        walk(relPath);
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".md")) continue;
+
+      const src = join(mdRouteRoot, relPath);
+      const dest = join(distDir, relPath);
+      mkdirSync(dirname(dest), { recursive: true });
+      copyFileSync(src, dest);
+      copied += 1;
+    }
+  }
+
+  walk("");
+  console.log(`📝 Exported ${copied} markdown files to static route paths`);
+}
+
 async function buildSite(docsDir: string) {
   const outDir = await generateProject(docsDir);
   await buildStatic(outDir, docsDir);
+  exportMarkdownRoutes(outDir);
   const staticOutDir = join(outDir, "dist");
   console.log(`\n📁 Static site output: ${staticOutDir}`);
 }

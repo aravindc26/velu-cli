@@ -1,0 +1,11 @@
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+file:///C:/Users/aravi/deluge/velu-cli/.velu-out/_server.mjs:409
+      else rejectPromise(new Error(`${command} exited with ${code}`));
+                         ^
+
+Error: dev exited with 1073807364
+    at ChildProcess.<anonymous> (file:///C:/Users/aravi/deluge/velu-cli/.velu-out/_server.mjs:409:26)
+    at ChildProcess.emit (node:events:519:28)
+    at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+
+Node.js v22.19.0

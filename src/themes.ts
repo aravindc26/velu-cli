@@ -129,11 +129,11 @@ function generateThemeCss(config: ThemeConfig): string {
     if (lightAccent) {
       const palette = deriveAccentPalette(lightAccent);
       lines.push(":root {");
-      lines.push(`  --color-fd-primary: ${palette.light.accent};`);
-      lines.push(`  --color-fd-primary-foreground: ${textColorFor(palette.light.accent)};`);
+      lines.push(`  --color-fd-primary: ${lightAccent};`);
+      lines.push(`  --color-fd-primary-foreground: ${textColorFor(lightAccent)};`);
       lines.push(`  --color-fd-accent: ${palette.light.accentLow};`);
       lines.push(`  --color-fd-accent-foreground: ${textColorFor(palette.light.accentLow)};`);
-      lines.push(`  --color-fd-ring: ${palette.light.accent};`);
+      lines.push(`  --color-fd-ring: ${lightAccent};`);
       lines.push("}");
       lines.push("");
     }
@@ -141,11 +141,11 @@ function generateThemeCss(config: ThemeConfig): string {
     if (darkAccent) {
       const palette = deriveAccentPalette(darkAccent);
       lines.push(".dark {");
-      lines.push(`  --color-fd-primary: ${palette.dark.accent};`);
-      lines.push(`  --color-fd-primary-foreground: ${textColorFor(palette.dark.accent)};`);
+      lines.push(`  --color-fd-primary: ${darkAccent};`);
+      lines.push(`  --color-fd-primary-foreground: ${textColorFor(darkAccent)};`);
       lines.push(`  --color-fd-accent: ${palette.dark.accentLow};`);
       lines.push(`  --color-fd-accent-foreground: ${textColorFor(palette.dark.accentLow)};`);
-      lines.push(`  --color-fd-ring: ${palette.dark.accent};`);
+      lines.push(`  --color-fd-ring: ${darkAccent};`);
       lines.push("}");
       lines.push("");
     }

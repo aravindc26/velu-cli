@@ -17,7 +17,7 @@ nextjs-portal {
   }
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1024px) {
   #nd-docs-layout {
     --fd-toc-width: 268px;
   }
@@ -502,6 +502,22 @@ nextjs-portal {
   gap: 0.75rem;
 }
 
+.velu-step-title {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+}
+
+.velu-tabs-border-bottom {
+  border-bottom: 1px solid var(--color-fd-border);
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.velu-tabs-plain [role='tablist'] {
+  gap: 1rem;
+  margin-bottom: 0.45rem;
+}
+
 .velu-code-group-dropdown {
   border: 1px solid var(--color-fd-border);
   border-radius: 0.85rem;
@@ -729,21 +745,71 @@ nextjs-portal {
 }
 
 .velu-frame {
+  --velu-frame-gap-bg: #e5e7eb;
   border: 1px solid var(--color-fd-border);
   border-radius: 0.65rem;
   overflow: hidden;
   margin: 1rem 0;
 }
 
+:root[data-theme='dark'] .velu-frame,
+.dark .velu-frame {
+  --velu-frame-gap-bg: #2f2f2f;
+}
+
 .velu-frame-content {
-  padding: 0.8rem;
+  padding: 0.45rem;
+  background: var(--velu-frame-gap-bg);
+}
+
+.velu-frame-content img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 !important;
+  border-radius: 0.45rem;
+}
+
+.velu-frame-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 0 0 0.55rem;
+  border: 0;
+  font-size: 1.05rem;
+  line-height: 1.4;
+  color: var(--color-fd-foreground);
+  background: transparent;
+}
+
+.velu-frame-hint-icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  opacity: 0.9;
+  color: color-mix(in oklab, var(--color-fd-foreground) 72%, var(--color-fd-muted-foreground));
+}
+
+:root[data-theme='dark'] .velu-frame-hint-icon,
+.dark .velu-frame-hint-icon {
+  opacity: 1;
+  color: color-mix(in oklab, var(--color-fd-foreground) 92%, var(--color-fd-muted-foreground));
 }
 
 .velu-frame figcaption {
   font-size: 0.85rem;
-  color: var(--color-fd-muted-foreground);
-  border-top: 1px solid var(--color-fd-border);
+  color: color-mix(in oklab, var(--color-fd-foreground) 78%, var(--color-fd-muted-foreground));
+  border-top: 0;
   padding: 0.55rem 0.8rem;
+  background: var(--velu-frame-gap-bg);
+  text-align: center;
+  margin-top: -0.1rem;
+}
+
+.velu-frame figcaption a {
+  color: var(--color-fd-primary);
+  text-decoration: underline;
 }
 
 .velu-param,
@@ -759,6 +825,7 @@ nextjs-portal {
   flex-wrap: wrap;
   gap: 0.4rem;
   align-items: center;
+  position: relative;
 }
 
 .velu-param-head span,
@@ -775,9 +842,106 @@ nextjs-portal {
   font-size: 0.75rem;
 }
 
-.velu-param-head em {
+.velu-param-head em,
+.velu-property-head em {
   font-size: 0.75rem;
   color: var(--color-fd-muted-foreground);
+}
+
+.velu-param-field-item,
+.velu-response-field-item {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  position: relative;
+}
+
+.velu-param-field-item::before,
+.velu-response-field-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1.15rem;
+  width: 1.15rem;
+}
+
+.velu-param-field-item + .velu-param-field-item,
+.velu-response-field-item + .velu-response-field-item {
+  border-top: 1px solid color-mix(in oklab, var(--color-fd-foreground) 18%, transparent);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.velu-param-field-item .velu-param-head code,
+.velu-response-field-item .velu-property-head code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--color-fd-primary);
+  font-weight: 400;
+  font-size: 1.10em;
+}
+
+.velu-param-anchor {
+  position: absolute;
+  left: -1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--color-fd-muted-foreground);
+  text-decoration: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.velu-param-anchor svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.velu-param-field-item:hover .velu-param-anchor,
+.velu-param-field-item:focus-within .velu-param-anchor,
+.velu-response-field-item:hover .velu-param-anchor,
+.velu-response-field-item:focus-within .velu-param-anchor,
+.velu-param-anchor:focus-visible {
+  opacity: 0.9;
+  visibility: visible;
+}
+
+.velu-param-anchor:hover {
+  color: var(--color-fd-foreground);
+}
+
+.velu-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.velu-pill-required {
+  background: rgba(220, 38, 38, 0.16);
+  color: #ef4444;
+}
+
+.velu-pill-deprecated {
+  background: rgba(245, 158, 11, 0.18);
+  color: #f59e0b;
+}
+
+.velu-pill-type {
+  background: #e5e7eb;
+  color: #292929;
 }
 
 .velu-param-body,
@@ -800,17 +964,58 @@ nextjs-portal {
   padding: 0.08rem 0.4rem;
 }
 
-.velu-request-example,
-.velu-response-example,
 .velu-endpoint,
 .velu-api-playground,
 .velu-openapi,
-.velu-snippet,
-.velu-update {
+.velu-snippet {
   border: 1px solid var(--color-fd-border);
   border-radius: 0.65rem;
   padding: 0.8rem;
   margin: 1rem 0;
+}
+
+.velu-update {
+  display: grid;
+  grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr);
+  column-gap: 1rem;
+  row-gap: 0.45rem;
+  align-items: start;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  margin: 1rem 0 1.5rem;
+}
+
+.velu-request-example,
+.velu-response-example {
+  margin: 0;
+}
+
+.velu-request-example:not(.velu-in-toc-example),
+.velu-response-example:not(.velu-in-toc-example) {
+  margin: 1rem 0;
+}
+
+.velu-request-example > *:first-child,
+.velu-response-example > *:first-child {
+  margin-top: 0 !important;
+}
+
+.velu-request-example > *:last-child,
+.velu-response-example > *:last-child {
+  margin-bottom: 0 !important;
+}
+
+.velu-response-example-status {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.72rem;
+  color: var(--color-fd-muted-foreground);
+  margin-bottom: 0.45rem;
 }
 
 .velu-endpoint-head {
@@ -840,15 +1045,384 @@ nextjs-portal {
   margin: 1rem 0;
 }
 
-.velu-update-head {
+.velu-update-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  position: sticky;
+  top: calc(var(--fd-nav-height, 0px) + 0.75rem);
+  align-self: start;
+}
+
+.velu-update-label {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.76rem;
   font-weight: 600;
-  margin-bottom: 0.25rem;
+  color: var(--color-fd-primary-foreground, #fff);
+  background: var(--color-fd-primary);
+  text-decoration: none;
+}
+
+.velu-update-label:hover {
+  background: color-mix(in oklab, var(--color-fd-primary) 86%, black);
+  color: var(--color-fd-primary-foreground, #fff);
+}
+
+.velu-update-description {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.85rem;
+}
+
+.velu-update-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.velu-update-tag {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  padding: 0.08rem 0.45rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.velu-update-content {
+  min-width: 0;
+}
+
+.velu-update-content > :first-child {
+  margin-top: 0;
+}
+
+.velu-update-content > :last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .velu-update {
+    grid-template-columns: 1fr;
+  }
+
+  .velu-update-meta {
+    position: static;
+    top: auto;
+  }
+}
+
+.velu-view {
+  margin: 1rem 0;
+}
+
+.velu-view-toc-host {
+  margin-bottom: 0.75rem;
+}
+
+.velu-view-toc-switcher {
+  position: relative;
+}
+
+.velu-view-toc-trigger {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.9rem;
+  background: var(--color-fd-card);
+  color: var(--color-fd-foreground);
+  font-size: 1.02rem;
+  font-weight: 500;
+  line-height: 1.15;
+  padding: 0.7rem 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+}
+
+.velu-view-toc-trigger:hover {
+  border-color: var(--color-fd-primary);
+}
+
+.velu-view-toc-trigger > span {
+  flex: 1;
+  text-align: left;
+}
+
+.velu-view-toc-chevron {
+  width: 1rem;
+  height: 1rem;
+  transition: transform 0.15s ease;
+  color: var(--color-fd-muted-foreground);
+}
+
+.velu-view-toc-chevron.open {
+  transform: rotate(180deg);
+}
+
+.velu-view-toc-menu {
+  margin-top: 0.35rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.9rem;
+  background: var(--color-fd-card);
+  overflow: hidden;
+}
+
+.velu-view-toc-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.7rem 0.85rem;
+  border: 0;
+  border-top: 1px solid transparent;
+  background: transparent;
+  color: var(--color-fd-foreground);
+  font-size: 1.02rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.velu-view-toc-option + .velu-view-toc-option {
+  border-top-color: var(--color-fd-border);
+}
+
+.velu-view-toc-option:hover {
+  background: var(--color-fd-accent);
+}
+
+.velu-view-toc-option-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.velu-view-check {
+  width: 1rem;
+  height: 1rem;
+  color: #15803d;
+}
+
+.velu-view-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.velu-view-option-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex-shrink: 0;
+}
+
+.velu-view-option-icon-img {
+  margin: 0 !important;
+  border-radius: 0.16rem;
+  object-fit: contain;
+}
+
+.velu-view-content > :first-child {
+  margin-top: 0;
+}
+
+.velu-view-content > :last-child {
+  margin-bottom: 0;
+}
+
+.velu-toc-replaced > * {
+  display: none !important;
+}
+
+.velu-toc-examples {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 0.75rem;
+  width: calc(100% - 0.35rem);
+  box-sizing: border-box;
+}
+
+#nd-toc .velu-in-toc-example {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+#nd-toc .velu-in-toc-example.velu-panel {
+  border: 1px solid var(--color-fd-border);
+  background: var(--color-fd-card);
+  border-radius: 1rem;
+  padding: 0.45rem;
+}
+
+#nd-toc .velu-in-toc-example h4 {
+  margin-bottom: 0.55rem;
+}
+
+.velu-toc-replaced {
+  padding-right: 0.5rem !important;
+  overflow: visible !important;
+}
+
+.velu-toc-replaced > .velu-toc-examples {
+  display: grid !important;
+}
+
+#nd-toc .velu-in-toc-example pre,
+#nd-toc .velu-in-toc-example [data-codeblock],
+#nd-toc .velu-in-toc-example .shiki {
+  max-width: 100% !important;
+  overflow-x: auto !important;
+}
+
+#nd-toc .velu-in-toc-example [role='tablist'],
+#nd-toc .velu-in-toc-example [role='tabpanel'],
+#nd-toc .velu-in-toc-example [data-codeblock] {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+#nd-toc .velu-in-toc-example [role='tabpanel'] {
+  padding: 0 !important;
+}
+
+#nd-toc .velu-in-toc-example [role='tabpanel'] > figure {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+}
+
+#nd-toc .velu-in-toc-example pre,
+#nd-toc .velu-in-toc-example .shiki,
+#nd-toc .velu-in-toc-example .shiki code {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box;
+}
+
+#nd-toc .velu-in-toc-example .fd-scroll-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+  --padding-right: calc(var(--spacing) * 4) !important;
+}
+
+#nd-toc .velu-in-toc-example .fd-scroll-container > pre {
+  width: 100% !important;
+  min-width: 100% !important;
+}
+
+@media (max-width: 1023px) {
+  .velu-toc-replaced > * {
+    display: unset !important;
+  }
+
+  .velu-toc-examples {
+    display: none !important;
+  }
+
+  #nd-page.velu-page-with-toc-examples {
+    max-width: 900px !important;
+  }
+}
+
+
+@media (min-width: 1024px) {
+  #nd-page.velu-page-with-toc-examples {
+    max-width: 680px !important;
+  }
+}
+
+.velu-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
 }
 
 .velu-tooltip {
   text-decoration: underline dotted;
   text-underline-offset: 0.2rem;
   cursor: help;
+}
+
+.velu-tooltip-popover {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.25rem);
+  transform: translateX(-50%) translateY(4px);
+  min-width: 14rem;
+  max-width: min(22rem, calc(100vw - 2rem));
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.65rem;
+  background: var(--color-fd-popover);
+  color: var(--color-fd-foreground);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+  padding: 0.6rem 0.7rem;
+  display: grid;
+  gap: 0.25rem;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  z-index: 60;
+}
+
+/* Keep hover active while moving from trigger text to the tooltip card. */
+.velu-tooltip-popover::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.5rem;
+  height: 0.5rem;
+}
+
+.velu-tooltip-popover::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 6px 6px 0 6px;
+  border-style: solid;
+  border-color: var(--color-fd-border) transparent transparent transparent;
+}
+
+.velu-tooltip-wrap:hover .velu-tooltip-popover,
+.velu-tooltip-wrap:focus-within .velu-tooltip-popover {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+.velu-tooltip-headline {
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.velu-tooltip-text {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--color-fd-muted-foreground);
+}
+
+.velu-tooltip-cta {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-fd-primary);
+  text-decoration: none;
 }
 
 .velu-inline-icon {
@@ -860,15 +1434,99 @@ nextjs-portal {
 
 .velu-inline-icon svg,
 .velu-inline-icon img {
-  width: 1rem;
-  height: 1rem;
+  width: 100%;
+  height: 100%;
 }
 
 .velu-mermaid {
-  border: 1px dashed var(--color-fd-border);
+  position: relative;
+  border: 0;
   border-radius: 0.6rem;
-  padding: 0.75rem;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.velu-mermaid-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  transform-origin: center center;
+  transition: transform 0.18s ease;
+}
+
+.velu-mermaid-svg {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.velu-mermaid-svg svg {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.velu-mermaid-error {
+  margin: 0;
   white-space: pre-wrap;
+  font-size: 0.85rem;
+}
+
+.velu-mermaid-controls {
+  position: absolute;
+  display: grid;
+  grid-template-columns: repeat(3, 2.25rem);
+  grid-template-rows: repeat(3, 2.25rem);
+  gap: 0.28rem;
+  width: auto;
+  padding: 0.28rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.65rem;
+  background: color-mix(in oklab, var(--color-fd-card) 96%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.velu-mermaid-controls button {
+  border: 1px solid var(--color-fd-border);
+  background: color-mix(in oklab, var(--color-fd-card) 82%, transparent);
+  color: var(--color-fd-foreground);
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.velu-mermaid-controls button:hover {
+  border-color: var(--color-fd-primary);
+  color: var(--color-fd-primary);
+}
+
+.velu-mermaid-btn-up { grid-column: 2; grid-row: 1; }
+.velu-mermaid-btn-zoom-in { grid-column: 3; grid-row: 1; }
+.velu-mermaid-btn-left { grid-column: 1; grid-row: 2; }
+.velu-mermaid-btn-reset { grid-column: 2; grid-row: 2; }
+.velu-mermaid-btn-right { grid-column: 3; grid-row: 2; }
+.velu-mermaid-btn-down { grid-column: 2; grid-row: 3; }
+.velu-mermaid-btn-zoom-out { grid-column: 3; grid-row: 3; }
+
+.velu-mermaid-controls-top-left { top: 0.55rem; left: 0.55rem; }
+.velu-mermaid-controls-top-right { top: 0.55rem; right: 0.55rem; }
+.velu-mermaid-controls-bottom-left { bottom: 0.55rem; left: 0.55rem; }
+.velu-mermaid-controls-bottom-right { bottom: 0.55rem; right: 0.55rem; }
+
+@media (max-width: 768px) {
+  .velu-mermaid-controls {
+    grid-template-columns: repeat(3, 2rem);
+    grid-template-rows: repeat(3, 2rem);
+  }
 }
 
 .velu-callout {
@@ -881,6 +1539,13 @@ nextjs-portal {
 }
 
 .velu-callout-info {
+  background: rgba(37, 99, 235, 0.1);
+  border-color: rgba(37, 99, 235, 0.26);
+  color: #1e40af;
+}
+
+:root[data-theme='dark'] .velu-callout-info,
+.dark .velu-callout-info {
   background: rgba(37, 99, 235, 0.14);
   border-color: rgba(37, 99, 235, 0.32);
   color: #bfdbfe;
@@ -889,24 +1554,44 @@ nextjs-portal {
 .velu-callout-warning {
   background: rgba(245, 158, 11, 0.16);
   border-color: rgba(245, 158, 11, 0.34);
-  color: #fde68a;
+  color: #92400e;
 }
 
 .velu-callout-success {
   background: rgba(22, 163, 74, 0.14);
   border-color: rgba(22, 163, 74, 0.34);
-  color: #bbf7d0;
+  color: #166534;
 }
 
 .velu-callout-error {
   background: rgba(220, 38, 38, 0.16);
   border-color: rgba(220, 38, 38, 0.34);
-  color: #fecaca;
+  color: #991b1b;
 }
 
 .velu-callout-idea {
   background: rgba(147, 51, 234, 0.14);
   border-color: rgba(147, 51, 234, 0.32);
+  color: #6b21a8;
+}
+
+:root[data-theme='dark'] .velu-callout-warning,
+.dark .velu-callout-warning {
+  color: #fde68a;
+}
+
+:root[data-theme='dark'] .velu-callout-success,
+.dark .velu-callout-success {
+  color: #bbf7d0;
+}
+
+:root[data-theme='dark'] .velu-callout-error,
+.dark .velu-callout-error {
+  color: #fecaca;
+}
+
+:root[data-theme='dark'] .velu-callout-idea,
+.dark .velu-callout-idea {
   color: #e9d5ff;
 }
 
@@ -1294,7 +1979,13 @@ nextjs-portal {
 }
 
 .velu-columns,
-.velu-examples,
+.velu-examples {
+  display: grid;
+  grid-template-columns: repeat(var(--velu-columns-count, auto-fit), minmax(220px, 1fr));
+  gap: 0.8rem;
+  margin: 1rem 0;
+}
+
 .velu-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1310,10 +2001,10 @@ nextjs-portal {
 }
 
 .velu-panel {
-  border-left: 3px solid var(--color-fd-primary);
-  background: var(--color-fd-accent);
-  border-radius: 0.5rem;
-  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--color-fd-border);
+  background: var(--color-fd-card);
+  border-radius: 1rem;
+  padding: 0.45rem;
   margin: 1rem 0;
 }
 
@@ -1321,29 +2012,217 @@ nextjs-portal {
   margin: 0 0 0.35rem;
 }
 
+.velu-panel .velu-callout,
+#nd-toc .velu-in-toc-example.velu-panel .velu-callout {
+  margin: 0;
+}
+
 .velu-prompt {
   border: 1px solid var(--color-fd-border);
-  border-radius: 0.6rem;
-  padding: 0.75rem;
-  font-family: var(--font-geist-mono);
-  white-space: pre-wrap;
+  border-radius: 0.8rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--color-fd-card);
   margin: 1rem 0;
+}
+
+.velu-prompt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.velu-prompt-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.velu-prompt-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-fd-muted-foreground);
+  flex-shrink: 0;
+}
+
+.velu-prompt-desc {
+  color: var(--color-fd-foreground);
+  font-size: 0.95rem;
+  font-weight: 400;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.velu-prompt-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.velu-prompt-copy {
+  border: 0;
+  border-radius: 0.45rem;
+  background: var(--color-fd-primary);
+  color: var(--color-fd-primary-foreground, #fff);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0 0.55rem;
+  height: 1.72rem;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.15;
+}
+
+.velu-prompt-copy:hover {
+  background: color-mix(in oklab, var(--color-fd-primary) 86%, black);
+}
+
+.velu-prompt-open {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.45rem;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0 0.5rem;
+  height: 1.72rem;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.velu-prompt-open:hover {
+  background: var(--color-fd-accent);
+}
+
+.velu-prompt-open-icon {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex-shrink: 0;
+}
+
+.velu-prompt-open-icon-on-light {
+  filter: brightness(0.55) contrast(1.35);
+}
+
+.velu-prompt-open-icon-on-dark {
+  filter: invert(1) brightness(1.08) contrast(1.1);
+}
+
+.velu-prompt-open-icon-on-dark {
+  display: none;
+}
+
+:root[data-theme='dark'] .velu-prompt-open-icon-on-light,
+.dark .velu-prompt-open-icon-on-light {
+  display: none;
+}
+
+:root[data-theme='dark'] .velu-prompt-open-icon-on-dark,
+.dark .velu-prompt-open-icon-on-dark {
+  display: inline-block;
 }
 
 .velu-tile {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  border: 1px solid var(--color-fd-border);
-  border-radius: 0.6rem;
-  padding: 0.75rem;
+  gap: 0.75rem;
+  border: 0;
+  border-radius: 0.75rem;
+  padding: 0.85rem;
   text-decoration: none;
   color: inherit;
 }
 
 .velu-tile:hover {
-  border-color: var(--color-fd-primary);
   background: var(--color-fd-accent);
+}
+
+.velu-tile-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 170px;
+  border: 0;
+  border-radius: 0.9rem;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--color-fd-card) 92%, transparent);
+  padding: 1rem;
+}
+
+.velu-tile-preview img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(100%, 320px);
+  max-height: 230px;
+  margin: 0 !important;
+}
+
+/* Fallback for MDX utility classes that may not be generated in this app build. */
+.velu-tile-preview .hidden {
+  display: none;
+}
+
+.velu-tile-preview .block {
+  display: block;
+}
+
+:root[data-theme='dark'] .velu-tile-preview .dark\:hidden,
+.dark .velu-tile-preview .dark\:hidden {
+  display: none !important;
+}
+
+:root[data-theme='dark'] .velu-tile-preview .dark\:block,
+.dark .velu-tile-preview .dark\:block {
+  display: block !important;
+}
+
+.velu-tile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  text-align: center;
+  align-items: center;
+}
+
+.velu-tile-title {
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.velu-tile-description {
+  font-size: 0.9rem;
+  color: var(--color-fd-muted-foreground);
+  line-height: 1.4;
+}
+
+.velu-tree {
+  margin: 1rem 0;
+}
+
+.velu-tree .velu-tree-file {
+  font-family: var(--font-fd-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+.velu-tree-folder-static .velu-tree-folder-label {
+  display: flex;
+  align-items: center;
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.velu-tree-children {
+  margin-inline-start: 0.5rem;
+  border-inline-start: 1px solid var(--color-fd-border);
+  padding-inline-start: 0.5rem;
 }
 
 .velu-tree ul {

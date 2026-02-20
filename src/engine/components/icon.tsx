@@ -7,6 +7,9 @@ import {
   Code2,
   Download,
   ExternalLink,
+  Flag,
+  Lightbulb,
+  Hand,
   Layers3,
   Lock,
   Newspaper,
@@ -28,6 +31,9 @@ const ICONS: Record<string, LucideIcon> = {
   'code-2': Code2,
   download: Download,
   'external-link': ExternalLink,
+  flag: Flag,
+  lightbulb: Lightbulb,
+  hand: Hand,
   'layers-3': Layers3,
   lock: Lock,
   newspaper: Newspaper,
@@ -43,7 +49,12 @@ const ICONS: Record<string, LucideIcon> = {
 
 const ALIASES: Record<string, string> = {
   api: 'code-2',
+  bulb: 'lightbulb',
   'book-open-cover': 'book-open',
+  'light-bulb': 'lightbulb',
+  'hand-index-finger': 'hand',
+  'hand-finger-right': 'hand',
+  'hand-point-right': 'hand',
   'layer-group': 'layers-3',
 };
 
@@ -98,8 +109,26 @@ export function VeluIcon({
         : faPrefixByType[(iconType ?? '').toLowerCase()] ?? 'fa6-solid';
 
   const iconifyName = canonical.replace(/^fa-/, '');
-  const colorQuery = color ? `?color=${encodeURIComponent(color)}` : '';
-  const iconifyUrl = `https://api.iconify.design/${prefix}:${iconifyName}.svg${colorQuery}`;
+  const iconifyUrl = `https://api.iconify.design/${prefix}:${iconifyName}.svg`;
 
-  return <img src={iconifyUrl} alt="" className={className} aria-hidden="true" />;
+  return (
+    <span
+      className={className}
+      aria-hidden="true"
+      style={{
+        display: 'inline-block',
+        width: '1em',
+        height: '1em',
+        backgroundColor: color ?? 'currentColor',
+        WebkitMaskImage: `url("${iconifyUrl}")`,
+        maskImage: `url("${iconifyUrl}")`,
+        WebkitMaskRepeat: 'no-repeat',
+        maskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center',
+        maskPosition: 'center',
+        WebkitMaskSize: 'contain',
+        maskSize: 'contain',
+      }}
+    />
+  );
 }

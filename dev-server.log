@@ -1,0 +1,40 @@
+📖 Loading velu.json from: C:\Users\aravi\deluge\mint-test
+📦 Copied engine files
+📋 Copied velu.json as docs.json (and legacy velu.json)
+🖼️  Copied static assets
+📄 Generated 53 pages + 11 navigation meta files
+🎨 Generated theme: neutral
+📦 Generated boilerplate
+
+✅ Site generated at: C:\Users\aravi\deluge\velu-cli\.velu-out
+
+  [36mvelu[0m  dev server
+
+  watching for file changes...
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:4321
+- Network:       http://172.26.0.1:4321
+
+✓ Starting...
+[MDX] generated files in 32.289700000000266ms
+[MDX] started dev server
+
+  We detected TypeScript in your project and reconfigured your tsconfig.json file for you.
+  The following suggested values were added to your tsconfig.json. These values can be changed to fit your project's needs:
+
+  	- include was updated to add 'dist/types/**/*.ts'
+  	- include was updated to add 'dist/dev/types/**/*.ts'
+
+✓ Ready in 2.3s
+○ Compiling /[...slug] ...
+ GET /platform/core-api/components/examples 200 in 48s (compile: 42s, proxy.ts: 55ms, generate-params: 1590ms, render: 6.5s)
+ GET /platform/core-api/components/examples 200 in 69s (compile: 62s, proxy.ts: 120ms, generate-params: 1093ms, render: 7.2s)
+ GET /platform/core-api/components/properties 200 in 67s (compile: 61s, proxy.ts: 101ms, generate-params: 2.1s, render: 5.9s)
+ GET /platform/core-api/components/prompt 200 in 91s (compile: 84s, proxy.ts: 163ms, generate-params: 1689ms, render: 6.6s)
+ GET /platform/core-api/components/properties 200 in 236ms (compile: 84ms, proxy.ts: 9ms, generate-params: 28ms, render: 142ms)
+ GET /platform/core-api/components/param-field 200 in 270ms (compile: 77ms, proxy.ts: 14ms, generate-params: 23ms, render: 179ms)
+ GET /platform/core-api/components/fields 200 in 616ms (compile: 150ms, proxy.ts: 35ms, generate-params: 54ms, render: 431ms)
+ GET /platform/core-api/components/panel 200 in 214ms (compile: 68ms, proxy.ts: 10ms, generate-params: 22ms, render: 136ms)
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 429ms (compile: 75ms, proxy.ts: 6ms, generate-params: 23ms, render: 348ms)
+ GET /platform/core-api/components/examples 200 in 254ms (compile: 74ms, proxy.ts: 11ms, generate-params: 25ms, render: 168ms)
+ GET /platform/core-api/components/panel 200 in 208ms (compile: 76ms, proxy.ts: 8ms, generate-params: 26ms, render: 124ms)
