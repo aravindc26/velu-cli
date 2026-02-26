@@ -9,16 +9,20 @@ import { VeluIcon } from '@/components/icon';
 import { VeluCodeGroup } from '@/components/code-group';
 import { VeluColor, VeluColorItem, VeluColorRow } from '@/components/color';
 import { VeluExpandable } from '@/components/expandable';
+import { VeluImage } from '@/components/image';
 import { VeluMermaid } from '@/components/mermaid';
 import { VeluPrompt } from '@/components/prompt';
 import { VeluSyncedTabs } from '@/components/synced-tabs';
 import { VeluView } from '@/components/view';
-import { getIconLibrary } from '@/lib/velu';
+import { VeluOpenAPI, VeluOpenAPISchema } from '@/components/openapi';
+import { getApiConfig, getIconLibrary } from '@/lib/velu';
 
 export function getMDXComponents(components?: MDXComponents): MDXComponents {
   const Card = defaultMdxComponents.Card as any;
   const Cards = defaultMdxComponents.Cards as any;
   const iconLibrary = getIconLibrary();
+  const apiConfig = getApiConfig();
+  const defaultProxyUrl = apiConfig.playgroundProxyEnabled ? '/api/proxy' : '';
   const Callout = defaultMdxComponents.Callout as any;
   const CalloutTitle = defaultMdxComponents.CalloutTitle as any;
   const CalloutDescription = defaultMdxComponents.CalloutDescription as any;
@@ -75,10 +79,32 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
       File: VeluTreeFile,
     },
   );
+  const VeluFilesFolder = ({ disabled, ...props }: any) => (
+    <VeluTreeFolder openable={disabled ? false : undefined} {...props} />
+  );
+  const VeluFiles = Object.assign(
+    ({ children, className, ...props }: any) => (
+      <FumaFiles className={['velu-files', className].filter(Boolean).join(' ')} {...props}>
+        {children}
+      </FumaFiles>
+    ),
+    {
+      Folder: VeluFilesFolder,
+      File: VeluTreeFile,
+    },
+  );
+  const VeluCards = ({ className, ...props }: any) => (
+    <Cards
+      {...props}
+      className={['velu-card-group', className].filter(Boolean).join(' ')}
+    />
+  );
 
   return {
     ...defaultMdxComponents,
     ...components,
+    Cards: VeluCards as any,
+    img: VeluImage as any,
     // Mint-style aliases used in imported docs content.
     Note: ({ children }: { children?: ReactNode }) => (
       <Callout type="info" className="velu-callout velu-callout-info">{children}</Callout>
@@ -437,23 +463,52 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
         {children ? <div className="velu-endpoint-body">{children}</div> : null}
       </section>
     ),
-    APIPlayground: ({ endpoint, method = 'GET', className }: any) => (
-      <section className={['velu-api-playground', className].filter(Boolean).join(' ')}>
-        <div>API Playground</div>
-        <div><code>{String(method).toUpperCase()} {endpoint ?? '/'}</code></div>
-      </section>
+    APIPlayground: ({ endpoint, method = 'GET', spec, src, path, url, proxyUrl, className }: any) => (
+      <VeluOpenAPI
+        className={['velu-api-playground', className].filter(Boolean).join(' ')}
+        schemaSource={String(spec ?? src ?? path ?? url ?? '/api-reference/openapi-example.json')}
+        endpoint={String(endpoint ?? '/')}
+        method={method}
+        proxyUrl={typeof proxyUrl === 'string' ? proxyUrl : defaultProxyUrl}
+        exampleLanguages={apiConfig.exampleLanguages}
+        exampleAutogenerate={apiConfig.exampleAutogenerate}
+      />
     ),
-    ApiPlayground: ({ endpoint, method, className }: any) => (
-      <section className={['velu-api-playground', className].filter(Boolean).join(' ')}>
-        <div>API Playground</div>
-        <div><code>{String((method ?? 'GET')).toUpperCase()} {endpoint ?? '/'}</code></div>
-      </section>
+    ApiPlayground: ({ endpoint, method = 'GET', spec, src, path, url, proxyUrl, className }: any) => (
+      <VeluOpenAPI
+        className={['velu-api-playground', className].filter(Boolean).join(' ')}
+        schemaSource={String(spec ?? src ?? path ?? url ?? '/api-reference/openapi-example.json')}
+        endpoint={String(endpoint ?? '/')}
+        method={method}
+        proxyUrl={typeof proxyUrl === 'string' ? proxyUrl : defaultProxyUrl}
+        exampleLanguages={apiConfig.exampleLanguages}
+        exampleAutogenerate={apiConfig.exampleAutogenerate}
+      />
     ),
-    OpenAPI: ({ src, path, className }: any) => (
-      <section className={['velu-openapi', className].filter(Boolean).join(' ')}>
-        <div>OpenAPI</div>
-        <div><code>{src ?? path ?? 'openapi.json'}</code></div>
-      </section>
+    OpenAPI: ({ src, path, spec, url, proxyUrl, className }: any) => (
+      <VeluOpenAPI
+        className={['velu-openapi', className].filter(Boolean).join(' ')}
+        schemaSource={String(spec ?? src ?? path ?? url ?? '/api-reference/openapi-example.json')}
+        proxyUrl={typeof proxyUrl === 'string' ? proxyUrl : defaultProxyUrl}
+        exampleLanguages={apiConfig.exampleLanguages}
+        exampleAutogenerate={apiConfig.exampleAutogenerate}
+        showTitle
+        showDescription
+      />
+    ),
+    OpenApiSchema: ({ src, path, spec, url, name, schema, className }: any) => (
+      <VeluOpenAPISchema
+        className={['velu-openapi-schema-wrapper', className].filter(Boolean).join(' ')}
+        schemaSource={String(spec ?? src ?? path ?? url ?? '/api-reference/openapi-example.json')}
+        schema={String(schema ?? name ?? '')}
+      />
+    ),
+    OpenAPISchema: ({ src, path, spec, url, name, schema, className }: any) => (
+      <VeluOpenAPISchema
+        className={['velu-openapi-schema-wrapper', className].filter(Boolean).join(' ')}
+        schemaSource={String(spec ?? src ?? path ?? url ?? '/api-reference/openapi-example.json')}
+        schema={String(schema ?? name ?? '')}
+      />
     ),
     Snippet: ({ id, name, title, children, className }: any) => (
       <section className={['velu-snippet', className].filter(Boolean).join(' ')}>
@@ -483,8 +538,20 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
       const anchorId = `update-${anchorBase || 'item'}`;
 
       return (
-        <section id={anchorId} className={['velu-update', className].filter(Boolean).join(' ')} {...props}>
+        <section
+          id={anchorId}
+          data-update-label={updateLabel}
+          data-update-tags={updateTags.join('|')}
+          className={['velu-update', className].filter(Boolean).join(' ')}
+          {...props}
+        >
           <div className="velu-update-meta">
+            <a className="velu-update-anchor" href={`#${anchorId}`} aria-label={`Anchor for ${updateLabel}`}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+            </a>
             <a className="velu-update-label" href={`#${anchorId}`}>{updateLabel}</a>
             {updateDescription ? <div className="velu-update-description">{updateDescription}</div> : null}
             {updateTags.length ? (
@@ -546,6 +613,11 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     Tree: VeluTree as any,
     'Tree.Folder': VeluTreeFolder as any,
     'Tree.File': VeluTreeFile as any,
+    Files: VeluFiles as any,
+    Folder: VeluFilesFolder as any,
+    File: VeluTreeFile as any,
+    'Files.Folder': VeluFilesFolder as any,
+    'Files.File': VeluTreeFile as any,
     View: VeluView as any,
     Icon: ({ icon, name, iconType, color, size, className }: any) => {
       const pxSize = typeof size === 'number' && Number.isFinite(size) ? size : undefined;

@@ -30,6 +30,9 @@ interface VeluAnchor {
   href?: string;
   icon?: string;
   iconType?: string;
+  version?: string;
+  openapi?: VeluOpenApiSource;
+  asyncapi?: VeluOpenApiSource;
   color?: {
     light: string;
     dark: string;
@@ -51,6 +54,9 @@ interface VeluGroup {
   icon?: string;
   iconType?: string;
   tag?: string;
+  version?: string;
+  openapi?: VeluOpenApiSource;
+  asyncapi?: VeluOpenApiSource;
   expanded?: boolean;
   description?: string;
   hidden?: boolean;
@@ -61,6 +67,8 @@ interface VeluMenuItem {
   item: string;
   icon?: string;
   iconType?: string;
+  openapi?: VeluOpenApiSource;
+  asyncapi?: VeluOpenApiSource;
   groups?: VeluGroup[];
   pages?: (string | VeluSeparator | VeluLink)[];
 }
@@ -70,7 +78,10 @@ interface VeluTab {
   slug?: string;
   icon?: string;
   iconType?: string;
+  version?: string;
   href?: string;
+  openapi?: VeluOpenApiSource;
+  asyncapi?: VeluOpenApiSource;
   pages?: (string | VeluSeparator | VeluLink)[];
   groups?: VeluGroup[];
   menu?: VeluMenuItem[];
@@ -78,6 +89,8 @@ interface VeluTab {
 
 interface VeluLanguageNav {
   language: string;
+  openapi?: VeluOpenApiSource;
+  asyncapi?: VeluOpenApiSource;
   tabs: VeluTab[];
 }
 
@@ -85,14 +98,20 @@ interface VeluProductNav {
   product: string;
   icon?: string;
   iconType?: string;
+  openapi?: VeluOpenApiSource;
+  asyncapi?: VeluOpenApiSource;
   tabs?: VeluTab[];
   pages?: (string | VeluSeparator | VeluLink)[];
 }
 
 interface VeluVersionNav {
   version: string;
+  openapi?: VeluOpenApiSource;
+  asyncapi?: VeluOpenApiSource;
   tabs: VeluTab[];
 }
+
+type VeluOpenApiSource = string | string[] | Record<string, unknown>;
 
 interface VeluConfig {
   $schema?: string;
@@ -103,7 +122,32 @@ interface VeluConfig {
   colors?: { primary?: string; light?: string; dark?: string };
   appearance?: "system" | "light" | "dark";
   styling?: { codeblocks?: { theme?: string | { light: string; dark: string } } };
+  openapi?: VeluOpenApiSource;
+  asyncapi?: VeluOpenApiSource;
+  api?: {
+    baseUrl?: string;
+    playground?: {
+      mode?: string;
+      display?: string;
+      proxy?: boolean;
+    };
+    examples?: {
+      languages?: string[];
+      defaults?: "required" | "all";
+      prefill?: boolean;
+      autogenerate?: boolean;
+    };
+    mdx?: {
+      server?: string;
+      auth?: {
+        method?: "bearer" | "basic" | "key" | "none";
+        name?: string;
+      };
+    };
+  };
   navigation: {
+    openapi?: VeluOpenApiSource;
+    asyncapi?: VeluOpenApiSource;
     tabs?: VeluTab[];
     languages?: VeluLanguageNav[];
     products?: VeluProductNav[];
@@ -114,6 +158,49 @@ interface VeluConfig {
       tabs?: VeluGlobalTab[];
     };
   };
+}
+
+const HTTP_METHODS = new Set([
+  "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD", "TRACE", "CONNECT", "WEBHOOK",
+]);
+
+function isOpenApiOperationReference(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  const withSpec = trimmed.match(/^(\S+)\s+([A-Za-z]+)\s+(.+)$/);
+  if (withSpec) {
+    const method = withSpec[2].toUpperCase();
+    const endpoint = withSpec[3].trim();
+    if (!HTTP_METHODS.has(method)) return false;
+    if (method === "WEBHOOK") return endpoint.length > 0;
+    return endpoint.startsWith("/");
+  }
+  const noSpec = trimmed.match(/^([A-Za-z]+)\s+(.+)$/);
+  if (!noSpec) return false;
+  const method = noSpec[1].toUpperCase();
+  const endpoint = noSpec[2].trim();
+  if (!HTTP_METHODS.has(method)) return false;
+  if (method === "WEBHOOK") return endpoint.length > 0;
+  return endpoint.startsWith("/");
+}
+
+function isAsyncApiChannelReference(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  const withSpec = trimmed.match(/^(\S+)\s+(.+)$/);
+  if (!withSpec) return false;
+  const first = withSpec[1].trim();
+  const maybeMethod = first.toUpperCase();
+  if (HTTP_METHODS.has(maybeMethod)) return false;
+  const looksLikeSpec =
+    first.startsWith('/') ||
+    first.startsWith('./') ||
+    first.startsWith('../') ||
+    /^https?:\/\//i.test(first) ||
+    first.endsWith('.json') ||
+    first.endsWith('.yaml') ||
+    first.endsWith('.yml');
+  return looksLikeSpec && withSpec[2].trim().length > 0;
 }
 
 function loadJson(filePath: string): unknown {
@@ -202,6 +289,8 @@ function validateVeluConfig(docsDir: string, schemaPath: string): { valid: boole
   // Validate that all referenced page files exist (.mdx or .md)
   const pages = collectPages(config);
   for (const page of pages) {
+    if (isOpenApiOperationReference(page)) continue;
+    if (isAsyncApiChannelReference(page)) continue;
     const mdxPath = join(docsDir, `${page}.mdx`);
     const mdPath = join(docsDir, `${page}.md`);
     if (!existsSync(mdxPath) && !existsSync(mdPath)) {

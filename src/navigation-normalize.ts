@@ -14,10 +14,13 @@ interface NavGroup {
   slug: string;
   icon?: string;
   iconType?: string;
+  version?: string;
   tag?: string;
   expanded?: boolean;
   description?: string;
   hidden?: boolean;
+  openapi?: OpenApiValue;
+  asyncapi?: OpenApiValue;
   pages: NavEntry[];
 }
 
@@ -26,12 +29,16 @@ interface NavTab {
   slug: string;
   icon?: string;
   iconType?: string;
+  version?: string;
   href?: string;
+  openapi?: OpenApiValue;
+  asyncapi?: OpenApiValue;
   pages?: Array<string | NavSeparator | NavLink>;
   groups?: NavGroup[];
 }
 
 type NavEntry = string | NavGroup | NavSeparator | NavLink;
+type OpenApiValue = string | string[] | { source: string | string[]; directory?: string };
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -92,6 +99,40 @@ function uniqueSlug(base: string, used: Set<string>): string {
   return candidate;
 }
 
+function normalizeOpenApiValue(value: unknown): OpenApiValue | undefined {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  if (Array.isArray(value)) {
+    const items = value
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    return items.length > 0 ? items : undefined;
+  }
+  if (isObject(value)) {
+    const source = normalizeOpenApiValue(value.source);
+    if (source === undefined || typeof source === "object" && !Array.isArray(source)) return undefined;
+    const rawDirectory = typeof value.directory === "string" ? value.directory.trim() : "";
+    const directory = rawDirectory ? rawDirectory.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "") : undefined;
+    return directory ? { source, directory } : { source };
+  }
+  return undefined;
+}
+
+function resolveOpenApiValue(local: unknown, inherited?: OpenApiValue): OpenApiValue | undefined {
+  return normalizeOpenApiValue(local) ?? inherited;
+}
+
+function resolveVersionValue(local: unknown, inherited?: string): string | undefined {
+  if (typeof local === "string") {
+    const trimmed = local.trim();
+    if (trimmed.length > 0) return trimmed;
+  }
+  return inherited;
+}
+
 
 function normalizeLink(value: NavLink): NavLink {
   const out: NavLink = { href: value.href, label: value.label };
@@ -117,7 +158,9 @@ function hasContent(value: Record<string, unknown>): boolean {
     (Array.isArray(value.groups) && value.groups.length > 0) ||
     (Array.isArray(value.menu) && value.menu.length > 0) ||
     (Array.isArray(value.tabs) && value.tabs.length > 0) ||
-    (Array.isArray(value.dropdowns) && value.dropdowns.length > 0);
+    (Array.isArray(value.dropdowns) && value.dropdowns.length > 0) ||
+    normalizeOpenApiValue(value.openapi) !== undefined ||
+    normalizeOpenApiValue(value.asyncapi) !== undefined;
 
   const hasAnchors =
     Array.isArray(value.anchors) &&
@@ -135,43 +178,73 @@ function hasContent(value: Record<string, unknown>): boolean {
   return hasSimple || hasAnchors;
 }
 
-function normalizeGroup(rawGroup: Record<string, unknown>, usedGroupSlugs: Set<string>): NavGroup {
+function normalizeGroup(
+  rawGroup: Record<string, unknown>,
+  usedGroupSlugs: Set<string>,
+  inheritedOpenApi?: OpenApiValue,
+  inheritedVersion?: string,
+): NavGroup {
   const groupName = typeof rawGroup.group === "string" ? rawGroup.group : "Group";
   const rawSlug = typeof rawGroup.slug === "string" ? rawGroup.slug : groupName;
   const groupSlug = uniqueSlug(slugify(rawSlug, "group"), usedGroupSlugs);
+  const openapi = resolveOpenApiValue(rawGroup.openapi, inheritedOpenApi);
+  const asyncapi = normalizeOpenApiValue(rawGroup.asyncapi);
+  const version = resolveVersionValue(rawGroup.version, inheritedVersion);
 
   const childUsedSlugs = new Set<string>();
-  const pages = collectEntries(rawGroup, childUsedSlugs);
+  const pages = collectEntries(rawGroup, childUsedSlugs, openapi, version);
 
   const out: NavGroup = { group: groupName, slug: groupSlug, pages };
   if (typeof rawGroup.icon === "string") out.icon = rawGroup.icon;
   if (typeof rawGroup.iconType === "string") out.iconType = rawGroup.iconType;
+  if (version !== undefined) out.version = version;
   if (typeof rawGroup.tag === "string") out.tag = rawGroup.tag;
   if (typeof rawGroup.expanded === "boolean") out.expanded = rawGroup.expanded;
   if (typeof rawGroup.description === "string") out.description = rawGroup.description;
   if (typeof rawGroup.hidden === "boolean") out.hidden = rawGroup.hidden;
+  if (openapi !== undefined) out.openapi = openapi;
+  if (asyncapi !== undefined) out.asyncapi = asyncapi;
   return out;
 }
 
-function normalizeMenuItem(rawItem: Record<string, unknown>, usedGroupSlugs: Set<string>): NavGroup {
+function normalizeMenuItem(
+  rawItem: Record<string, unknown>,
+  usedGroupSlugs: Set<string>,
+  inheritedOpenApi?: OpenApiValue,
+  inheritedVersion?: string,
+): NavGroup {
   const name = typeof rawItem.item === "string" ? rawItem.item : "Menu";
   const rawSlug = typeof rawItem.slug === "string" ? rawItem.slug : name;
   const slug = uniqueSlug(slugify(rawSlug, "menu"), usedGroupSlugs);
+  const openapi = resolveOpenApiValue(rawItem.openapi, inheritedOpenApi);
+  const asyncapi = normalizeOpenApiValue(rawItem.asyncapi);
+  const version = resolveVersionValue(rawItem.version, inheritedVersion);
 
   const nestedGroupSlugs = new Set<string>();
-  const pages = collectEntries(rawItem, nestedGroupSlugs);
+  const pages = collectEntries(rawItem, nestedGroupSlugs, openapi, version);
   const out: NavGroup = { group: name, slug, pages };
   if (typeof rawItem.icon === "string") out.icon = rawItem.icon;
   if (typeof rawItem.iconType === "string") out.iconType = rawItem.iconType;
+  if (version !== undefined) out.version = version;
+  if (openapi !== undefined) out.openapi = openapi;
+  if (asyncapi !== undefined) out.asyncapi = asyncapi;
   return out;
 }
 
-function normalizeTabAsGroup(rawTab: Record<string, unknown>, usedGroupSlugs: Set<string>): NavGroup {
+function normalizeTabAsGroup(
+  rawTab: Record<string, unknown>,
+  usedGroupSlugs: Set<string>,
+  inheritedOpenApi?: OpenApiValue,
+  inheritedVersion?: string,
+): NavGroup {
   const tabName = typeof rawTab.tab === "string" ? rawTab.tab : "Tab";
   const rawSlug = typeof rawTab.slug === "string" ? rawTab.slug : tabName;
   const slug = uniqueSlug(slugify(rawSlug, "tab"), usedGroupSlugs);
+  const openapi = resolveOpenApiValue(rawTab.openapi, inheritedOpenApi);
+  const asyncapi = normalizeOpenApiValue(rawTab.asyncapi);
+  const version = resolveVersionValue(rawTab.version, inheritedVersion);
   const nestedGroupSlugs = new Set<string>();
-  const pages = collectEntries(rawTab, nestedGroupSlugs);
+  const pages = collectEntries(rawTab, nestedGroupSlugs, openapi, version);
 
   if (typeof rawTab.href === "string" && rawTab.href.length > 0 && !hasContent(rawTab)) {
     pages.push({
@@ -185,16 +258,25 @@ function normalizeTabAsGroup(rawTab: Record<string, unknown>, usedGroupSlugs: Se
   const out: NavGroup = { group: tabName, slug, pages };
   if (typeof rawTab.icon === "string") out.icon = rawTab.icon;
   if (typeof rawTab.iconType === "string") out.iconType = rawTab.iconType;
+  if (version !== undefined) out.version = version;
+  if (openapi !== undefined) out.openapi = openapi;
+  if (asyncapi !== undefined) out.asyncapi = asyncapi;
   return out;
 }
 
-function normalizeDropdownAsGroup(rawDropdown: Record<string, unknown>, usedGroupSlugs: Set<string>): NavGroup {
+function normalizeDropdownAsGroup(
+  rawDropdown: Record<string, unknown>,
+  usedGroupSlugs: Set<string>,
+  inheritedOpenApi?: OpenApiValue,
+  inheritedVersion?: string,
+): NavGroup {
   return normalizeTabAsGroup(
     {
       tab: rawDropdown.dropdown,
       slug: rawDropdown.slug,
       icon: rawDropdown.icon,
       iconType: rawDropdown.iconType,
+      version: rawDropdown.version,
       href: rawDropdown.href,
       groups: rawDropdown.groups,
       pages: rawDropdown.pages,
@@ -202,40 +284,60 @@ function normalizeDropdownAsGroup(rawDropdown: Record<string, unknown>, usedGrou
       anchors: rawDropdown.anchors,
       dropdowns: rawDropdown.dropdowns,
       tabs: rawDropdown.tabs,
+      openapi: rawDropdown.openapi,
+      asyncapi: rawDropdown.asyncapi,
     },
-    usedGroupSlugs
+    usedGroupSlugs,
+    inheritedOpenApi,
+    inheritedVersion
   );
 }
 
-function normalizeAnchorAsGroup(rawAnchor: Record<string, unknown>, usedGroupSlugs: Set<string>): NavGroup {
+function normalizeAnchorAsGroup(
+  rawAnchor: Record<string, unknown>,
+  usedGroupSlugs: Set<string>,
+  inheritedOpenApi?: OpenApiValue,
+  inheritedVersion?: string,
+): NavGroup {
   const anchorName = typeof rawAnchor.anchor === "string" ? rawAnchor.anchor : "Anchor";
   const rawSlug = typeof rawAnchor.slug === "string" ? rawAnchor.slug : anchorName;
   const slug = uniqueSlug(slugify(rawSlug, "anchor"), usedGroupSlugs);
+  const openapi = resolveOpenApiValue(rawAnchor.openapi, inheritedOpenApi);
+  const asyncapi = normalizeOpenApiValue(rawAnchor.asyncapi);
+  const version = resolveVersionValue(rawAnchor.version, inheritedVersion);
   const nestedGroupSlugs = new Set<string>();
-  const pages = collectEntries(rawAnchor, nestedGroupSlugs);
+  const pages = collectEntries(rawAnchor, nestedGroupSlugs, openapi, version);
 
   const out: NavGroup = { group: anchorName, slug, pages };
   if (typeof rawAnchor.icon === "string") out.icon = rawAnchor.icon;
   if (typeof rawAnchor.iconType === "string") out.iconType = rawAnchor.iconType;
+  if (version !== undefined) out.version = version;
+  if (openapi !== undefined) out.openapi = openapi;
+  if (asyncapi !== undefined) out.asyncapi = asyncapi;
   return out;
 }
 
-function collectEntries(rawSection: Record<string, unknown>, usedGroupSlugs: Set<string>): NavEntry[] {
+function collectEntries(
+  rawSection: Record<string, unknown>,
+  usedGroupSlugs: Set<string>,
+  inheritedOpenApi?: OpenApiValue,
+  inheritedVersion?: string,
+): NavEntry[] {
   const entries: NavEntry[] = [];
 
   for (const item of Array.isArray(rawSection.menu) ? rawSection.menu : []) {
-    if (isMenuItem(item)) entries.push(normalizeMenuItem(item, usedGroupSlugs));
+    if (isMenuItem(item)) entries.push(normalizeMenuItem(item, usedGroupSlugs, inheritedOpenApi, inheritedVersion));
   }
 
   for (const group of Array.isArray(rawSection.groups) ? rawSection.groups : []) {
-    if (isGroupLike(group)) entries.push(normalizeGroup(group, usedGroupSlugs));
+    if (isGroupLike(group)) entries.push(normalizeGroup(group, usedGroupSlugs, inheritedOpenApi, inheritedVersion));
   }
 
   for (const item of Array.isArray(rawSection.pages) ? rawSection.pages : []) {
     if (typeof item === "string") entries.push(item);
     else if (isSeparator(item)) entries.push({ separator: item.separator });
     else if (isLink(item)) entries.push(normalizeLink(item));
-    else if (isGroupLike(item)) entries.push(normalizeGroup(item, usedGroupSlugs));
+    else if (isGroupLike(item)) entries.push(normalizeGroup(item, usedGroupSlugs, inheritedOpenApi, inheritedVersion));
   }
 
   for (const anchor of Array.isArray(rawSection.anchors) ? rawSection.anchors : []) {
@@ -243,30 +345,42 @@ function collectEntries(rawSection: Record<string, unknown>, usedGroupSlugs: Set
 
     const hrefOnly = typeof anchor.href === "string" && anchor.href.length > 0 && !hasContent(anchor);
     if (hrefOnly) entries.push(normalizeAnchorLink(anchor));
-    else entries.push(normalizeAnchorAsGroup(anchor, usedGroupSlugs));
+    else entries.push(normalizeAnchorAsGroup(anchor, usedGroupSlugs, inheritedOpenApi, inheritedVersion));
   }
 
   for (const dropdown of Array.isArray(rawSection.dropdowns) ? rawSection.dropdowns : []) {
-    if (isDropdownLike(dropdown)) entries.push(normalizeDropdownAsGroup(dropdown, usedGroupSlugs));
+    if (isDropdownLike(dropdown)) entries.push(normalizeDropdownAsGroup(dropdown, usedGroupSlugs, inheritedOpenApi, inheritedVersion));
   }
 
   for (const tab of Array.isArray(rawSection.tabs) ? rawSection.tabs : []) {
-    if (isTabLike(tab)) entries.push(normalizeTabAsGroup(tab, usedGroupSlugs));
+    if (isTabLike(tab)) entries.push(normalizeTabAsGroup(tab, usedGroupSlugs, inheritedOpenApi, inheritedVersion));
   }
 
   return entries;
 }
 
-function normalizeTab(rawTab: Record<string, unknown>, usedTabSlugs: Set<string>, slugPrefix: string): NavTab {
+function normalizeTab(
+  rawTab: Record<string, unknown>,
+  usedTabSlugs: Set<string>,
+  slugPrefix: string,
+  inheritedOpenApi?: OpenApiValue,
+  inheritedVersion?: string,
+): NavTab {
   const tabName = typeof rawTab.tab === "string" ? rawTab.tab : "Tab";
   const rawSlug = typeof rawTab.slug === "string" ? rawTab.slug : tabName;
   const tabSlugPart = slugify(rawSlug, "tab");
   const fullSlug = slugPrefix ? `${slugPrefix}/${tabSlugPart}` : tabSlugPart;
   const slug = uniqueSlug(fullSlug, usedTabSlugs);
+  const openapi = resolveOpenApiValue(rawTab.openapi, inheritedOpenApi);
+  const asyncapi = normalizeOpenApiValue(rawTab.asyncapi);
+  const version = resolveVersionValue(rawTab.version, inheritedVersion);
 
   const out: NavTab = { tab: tabName, slug };
   if (typeof rawTab.icon === "string") out.icon = rawTab.icon;
   if (typeof rawTab.iconType === "string") out.iconType = rawTab.iconType;
+  if (version !== undefined) out.version = version;
+  if (openapi !== undefined) out.openapi = openapi;
+  if (asyncapi !== undefined) out.asyncapi = asyncapi;
 
   if (typeof rawTab.href === "string" && rawTab.href.length > 0 && !hasContent(rawTab)) {
     out.href = rawTab.href;
@@ -274,7 +388,7 @@ function normalizeTab(rawTab: Record<string, unknown>, usedTabSlugs: Set<string>
   }
 
   const groupSlugSet = new Set<string>();
-  const entries = collectEntries(rawTab, groupSlugSet);
+  const entries = collectEntries(rawTab, groupSlugSet, openapi, version);
   const groups: NavGroup[] = [];
   const pages: Array<string | NavSeparator | NavLink> = [];
 
@@ -288,58 +402,92 @@ function normalizeTab(rawTab: Record<string, unknown>, usedTabSlugs: Set<string>
   return out;
 }
 
-function normalizeDropdownToTab(rawDropdown: Record<string, unknown>, usedTabSlugs: Set<string>, slugPrefix: string): NavTab {
+function normalizeDropdownToTab(
+  rawDropdown: Record<string, unknown>,
+  usedTabSlugs: Set<string>,
+  slugPrefix: string,
+  inheritedOpenApi?: OpenApiValue,
+  inheritedVersion?: string,
+): NavTab {
   return normalizeTab(
     {
       tab: rawDropdown.dropdown,
       slug: rawDropdown.slug,
       icon: rawDropdown.icon,
       iconType: rawDropdown.iconType,
+      version: rawDropdown.version,
       href: rawDropdown.href,
       groups: rawDropdown.groups,
       pages: rawDropdown.pages,
       menu: rawDropdown.menu,
       anchors: rawDropdown.anchors,
       dropdowns: rawDropdown.dropdowns,
-      tabs: rawDropdown.tabs,
-    },
+        tabs: rawDropdown.tabs,
+        openapi: rawDropdown.openapi,
+        asyncapi: rawDropdown.asyncapi,
+      },
     usedTabSlugs,
-    slugPrefix
+    slugPrefix,
+    inheritedOpenApi,
+    inheritedVersion
   );
 }
 
-function normalizeTabList(rawTabs: unknown[], usedTabSlugs: Set<string>, slugPrefix = ""): NavTab[] {
+function normalizeTabList(
+  rawTabs: unknown[],
+  usedTabSlugs: Set<string>,
+  slugPrefix = "",
+  inheritedOpenApi?: OpenApiValue,
+  inheritedVersion?: string,
+): NavTab[] {
   const tabs: NavTab[] = [];
   for (const item of rawTabs) {
-    if (isTabLike(item)) tabs.push(normalizeTab(item, usedTabSlugs, slugPrefix));
+    if (isTabLike(item)) tabs.push(normalizeTab(item, usedTabSlugs, slugPrefix, inheritedOpenApi, inheritedVersion));
   }
   return tabs;
 }
 
-function normalizeDropdownList(rawDropdowns: unknown[], usedTabSlugs: Set<string>, slugPrefix = ""): NavTab[] {
+function normalizeDropdownList(
+  rawDropdowns: unknown[],
+  usedTabSlugs: Set<string>,
+  slugPrefix = "",
+  inheritedOpenApi?: OpenApiValue,
+  inheritedVersion?: string,
+): NavTab[] {
   const tabs: NavTab[] = [];
   for (const item of rawDropdowns) {
-    if (isDropdownLike(item)) tabs.push(normalizeDropdownToTab(item, usedTabSlugs, slugPrefix));
+    if (isDropdownLike(item)) tabs.push(normalizeDropdownToTab(item, usedTabSlugs, slugPrefix, inheritedOpenApi, inheritedVersion));
   }
-  return tabs;
+  if (inheritedOpenApi === undefined && inheritedVersion === undefined) return tabs;
+  return tabs.map((tab) => ({
+    ...tab,
+    openapi: tab.openapi ?? inheritedOpenApi,
+    version: tab.version ?? inheritedVersion,
+  }));
 }
 
-function normalizeNavigationTabs(navigation: unknown, usedTabSlugs = new Set<string>()): NavTab[] {
+function normalizeNavigationTabs(
+  navigation: unknown,
+  usedTabSlugs = new Set<string>(),
+  inheritedOpenApi?: OpenApiValue,
+): NavTab[] {
   if (!isObject(navigation)) return [];
 
+  const sectionOpenApi = resolveOpenApiValue(navigation.openapi, inheritedOpenApi);
   const tabs: NavTab[] = [];
 
-  tabs.push(...normalizeTabList(Array.isArray(navigation.tabs) ? navigation.tabs : [], usedTabSlugs));
-  tabs.push(...normalizeDropdownList(Array.isArray(navigation.dropdowns) ? navigation.dropdowns : [], usedTabSlugs));
+  tabs.push(...normalizeTabList(Array.isArray(navigation.tabs) ? navigation.tabs : [], usedTabSlugs, "", sectionOpenApi));
+  tabs.push(...normalizeDropdownList(Array.isArray(navigation.dropdowns) ? navigation.dropdowns : [], usedTabSlugs, "", sectionOpenApi));
 
   if (Array.isArray(navigation.products)) {
     navigation.products.forEach((product, index) => {
       if (!isObject(product)) return;
       const productName = typeof product.product === "string" ? product.product : `Product ${index + 1}`;
       const prefix = slugify(productName, `product-${index + 1}`);
+      const productOpenApi = resolveOpenApiValue(product.openapi, sectionOpenApi);
 
-      tabs.push(...normalizeTabList(Array.isArray(product.tabs) ? product.tabs : [], usedTabSlugs, prefix));
-      tabs.push(...normalizeDropdownList(Array.isArray(product.dropdowns) ? product.dropdowns : [], usedTabSlugs, prefix));
+      tabs.push(...normalizeTabList(Array.isArray(product.tabs) ? product.tabs : [], usedTabSlugs, prefix, productOpenApi));
+      tabs.push(...normalizeDropdownList(Array.isArray(product.dropdowns) ? product.dropdowns : [], usedTabSlugs, prefix, productOpenApi));
 
       if (!Array.isArray(product.tabs) && !Array.isArray(product.dropdowns)) {
         if (hasContent(product)) {
@@ -356,9 +504,12 @@ function normalizeNavigationTabs(navigation: unknown, usedTabSlugs = new Set<str
                 anchors: product.anchors,
                 dropdowns: product.dropdowns,
                 tabs: product.tabs,
-              },
+            openapi: productOpenApi,
+            asyncapi: normalizeOpenApiValue(product.asyncapi),
+          },
               usedTabSlugs,
-              ""
+              "",
+              productOpenApi
             )
           );
         } else if (typeof product.href === "string" && product.href.length > 0) {
@@ -370,9 +521,12 @@ function normalizeNavigationTabs(navigation: unknown, usedTabSlugs = new Set<str
                 icon: product.icon,
                 iconType: product.iconType,
                 href: product.href,
-              },
+            openapi: productOpenApi,
+            asyncapi: normalizeOpenApiValue(product.asyncapi),
+          },
               usedTabSlugs,
-              ""
+              "",
+              productOpenApi
             )
           );
         }
@@ -385,9 +539,10 @@ function normalizeNavigationTabs(navigation: unknown, usedTabSlugs = new Set<str
       if (!isObject(version)) return;
       const versionName = typeof version.version === "string" ? version.version : `Version ${index + 1}`;
       const prefix = slugify(versionName, `version-${index + 1}`);
+      const versionOpenApi = resolveOpenApiValue(version.openapi, sectionOpenApi);
 
-      tabs.push(...normalizeTabList(Array.isArray(version.tabs) ? version.tabs : [], usedTabSlugs, prefix));
-      tabs.push(...normalizeDropdownList(Array.isArray(version.dropdowns) ? version.dropdowns : [], usedTabSlugs, prefix));
+      tabs.push(...normalizeTabList(Array.isArray(version.tabs) ? version.tabs : [], usedTabSlugs, prefix, versionOpenApi));
+      tabs.push(...normalizeDropdownList(Array.isArray(version.dropdowns) ? version.dropdowns : [], usedTabSlugs, prefix, versionOpenApi));
 
       if (!Array.isArray(version.tabs) && !Array.isArray(version.dropdowns)) {
         if (hasContent(version)) {
@@ -402,9 +557,12 @@ function normalizeNavigationTabs(navigation: unknown, usedTabSlugs = new Set<str
                 anchors: version.anchors,
                 dropdowns: version.dropdowns,
                 tabs: version.tabs,
-              },
+            openapi: versionOpenApi,
+            asyncapi: normalizeOpenApiValue(version.asyncapi),
+          },
               usedTabSlugs,
-              ""
+              "",
+              versionOpenApi
             )
           );
         } else if (typeof version.href === "string" && version.href.length > 0) {
@@ -414,9 +572,12 @@ function normalizeNavigationTabs(navigation: unknown, usedTabSlugs = new Set<str
                 tab: versionName,
                 slug: prefix,
                 href: version.href,
-              },
+            openapi: versionOpenApi,
+            asyncapi: normalizeOpenApiValue(version.asyncapi),
+          },
               usedTabSlugs,
-              ""
+              "",
+              versionOpenApi
             )
           );
         }
@@ -430,9 +591,11 @@ function normalizeNavigationTabs(navigation: unknown, usedTabSlugs = new Set<str
 
       const anchorName = typeof anchor.anchor === "string" ? anchor.anchor : `Anchor ${index + 1}`;
       const prefix = slugify(anchorName, `anchor-${index + 1}`);
+      const anchorOpenApi = resolveOpenApiValue(anchor.openapi, sectionOpenApi);
+      const anchorVersion = resolveVersionValue(anchor.version);
 
       if (Array.isArray(anchor.tabs)) {
-        tabs.push(...normalizeTabList(anchor.tabs, usedTabSlugs, prefix));
+        tabs.push(...normalizeTabList(anchor.tabs, usedTabSlugs, prefix, anchorOpenApi, anchorVersion));
       } else if (hasContent(anchor)) {
         tabs.push(
           normalizeTab(
@@ -441,15 +604,20 @@ function normalizeNavigationTabs(navigation: unknown, usedTabSlugs = new Set<str
               slug: prefix,
               icon: anchor.icon,
               iconType: anchor.iconType,
+              version: anchorVersion,
               groups: anchor.groups,
               pages: anchor.pages,
               menu: anchor.menu,
               anchors: anchor.anchors,
               dropdowns: anchor.dropdowns,
               tabs: anchor.tabs,
+              openapi: anchorOpenApi,
+              asyncapi: normalizeOpenApiValue(anchor.asyncapi),
             },
             usedTabSlugs,
-            ""
+            "",
+            anchorOpenApi,
+            anchorVersion
           )
         );
       }
@@ -472,38 +640,45 @@ function normalizeNavigationTabs(navigation: unknown, usedTabSlugs = new Set<str
           anchors: navigation.anchors,
           dropdowns: navigation.dropdowns,
           tabs: navigation.tabs,
+          openapi: sectionOpenApi,
+          asyncapi: normalizeOpenApiValue(navigation.asyncapi),
         },
         usedTabSlugs,
-        ""
+        "",
+        sectionOpenApi
       )
     );
   }
 
   return tabs;
 }
-
-function normalizeLanguageEntries(languages: unknown): Array<Record<string, unknown>> {
+function normalizeLanguageEntries(languages: unknown, inheritedOpenApi?: OpenApiValue): Array<Record<string, unknown>> {
   if (!Array.isArray(languages)) return [];
 
   return languages
     .filter(isObject)
     .map((entry) => {
       const usedTabSlugs = new Set<string>();
+      const languageOpenApi = resolveOpenApiValue(entry.openapi, inheritedOpenApi);
       return {
         ...entry,
-        tabs: normalizeNavigationTabs(entry, usedTabSlugs),
+        tabs: normalizeNavigationTabs(entry, usedTabSlugs, languageOpenApi),
       };
     });
 }
 
 export function normalizeConfigNavigation<T extends { navigation?: unknown }>(config: T): T {
   const nav = isObject(config.navigation) ? config.navigation : {};
+  const navOpenApi = resolveOpenApiValue((nav as Record<string, unknown>).openapi);
+  const navAsyncApi = normalizeOpenApiValue((nav as Record<string, unknown>).asyncapi);
   return {
     ...config,
     navigation: {
       ...nav,
-      tabs: normalizeNavigationTabs(nav),
-      languages: normalizeLanguageEntries(nav.languages),
+      ...(navOpenApi !== undefined ? { openapi: navOpenApi } : {}),
+      ...(navAsyncApi !== undefined ? { asyncapi: navAsyncApi } : {}),
+      tabs: normalizeNavigationTabs(nav, new Set<string>(), navOpenApi),
+      languages: normalizeLanguageEntries(nav.languages, navOpenApi),
       products: Array.isArray(nav.products) ? nav.products : [],
       versions: Array.isArray(nav.versions) ? nav.versions : [],
     },

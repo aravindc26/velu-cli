@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import 'fumadocs-ui/css/preset.css';
+@import 'fumadocs-openapi/css/preset.css';
 @import './velu-theme.css';
 
 body {
@@ -18,8 +19,59 @@ nextjs-portal {
 }
 
 @media (min-width: 1024px) {
-  #nd-docs-layout {
+  #nd-docs-layout,
+  #nd-notebook-layout {
     --fd-toc-width: 268px;
+  }
+
+  #nd-docs-layout:has(#nd-toc .velu-api-toc-rail),
+  #nd-notebook-layout:has(#nd-toc .velu-api-toc-rail) {
+    --fd-toc-width: clamp(420px, 32vw, 560px);
+  }
+
+  /* Override notebook's default xl TOC width reset for API example rail. */
+  #nd-toc:has(.velu-api-toc-rail) {
+    --fd-toc-width: clamp(420px, 32vw, 560px);
+    width: var(--fd-toc-width);
+    padding-top: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* Notebook header: keep tabs on the left and move search to the far right. */
+  #nd-subnav [data-header-body] > button[data-search-full] {
+    order: 3;
+    margin-left: auto;
+    width: min(280px, 28vw);
+    max-width: 280px;
+    min-width: 220px;
+    flex: 0 0 auto;
+  }
+
+  #nd-subnav [data-header-body] > div.flex.flex-1.items-center.justify-end.md\:gap-2 {
+    order: 2;
+    flex: 0 1 auto;
+    justify-content: flex-start;
+    margin-right: auto;
+  }
+
+  /* Top bar tabs: active underline like Mintlify. */
+  #nd-subnav [data-header-body] > div.flex.flex-1.items-center.justify-end.md\:gap-2 > div.flex.items-center.gap-6.empty\:hidden.max-lg\:hidden {
+    align-self: stretch;
+  }
+
+  #nd-subnav [data-header-body] > div.flex.flex-1.items-center.justify-end.md\:gap-2 > div.flex.items-center.gap-6.empty\:hidden.max-lg\:hidden > a {
+    display: inline-flex;
+    align-items: center;
+    height: 100%;
+    font-size: 1.05rem;
+    font-weight: 700;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+
+  #nd-subnav [data-header-body] > div.flex.flex-1.items-center.justify-end.md\:gap-2 > div.flex.items-center.gap-6.empty\:hidden.max-lg\:hidden > a[data-active='true'] {
+    border-bottom-color: var(--color-fd-primary);
   }
 }
 
@@ -27,7 +79,18 @@ nextjs-portal {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding-top: 0.5rem;
+}
+
+.velu-sidebar-footer-shell {
+  border-top: 1px solid var(--color-fd-border);
+  padding: 0.75rem 1rem 1rem;
+}
+
+.velu-sidebar-footer-icons {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
 }
 
 .velu-sidebar-banner {
@@ -291,6 +354,82 @@ nextjs-portal {
   opacity: 0.8;
 }
 
+.velu-status-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 0.45rem;
+  padding: 0.06rem 0.38rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-fd-border);
+  font-size: 0.62rem;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--color-fd-muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.velu-status-badge-deprecated {
+  border-color: color-mix(in oklab, #f59e0b 52%, var(--color-fd-border));
+  background: color-mix(in oklab, #f59e0b 14%, transparent);
+  color: #f59e0b;
+}
+
+.velu-openapi-sidebar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.velu-openapi-sidebar-label {
+  min-width: 0;
+}
+
+.velu-openapi-method-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0.06rem 0.43rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  flex-shrink: 0;
+}
+
+.velu-openapi-method-get {
+  background: color-mix(in oklab, #16a34a 20%, transparent);
+  color: #22c55e;
+}
+
+.velu-openapi-method-post {
+  background: color-mix(in oklab, #2563eb 20%, transparent);
+  color: #60a5fa;
+}
+
+.velu-openapi-method-put {
+  background: color-mix(in oklab, #ca8a04 20%, transparent);
+  color: #facc15;
+}
+
+.velu-openapi-method-patch {
+  background: color-mix(in oklab, #ea580c 20%, transparent);
+  color: #fb923c;
+}
+
+.velu-openapi-method-delete {
+  background: color-mix(in oklab, #dc2626 20%, transparent);
+  color: #f87171;
+}
+
+.velu-openapi-method-webhook {
+  background: color-mix(in oklab, #8b5cf6 20%, transparent);
+  color: #c4b5fd;
+}
+
 .velu-theme-toggle {
   display: flex;
   align-items: center;
@@ -422,12 +561,14 @@ nextjs-portal {
   margin-bottom: 0.25rem;
 }
 
-.velu-card-group-cols-1 [data-card] + [data-card] {
-  margin-top: 0.75rem;
+.velu-card-group {
+  display: grid !important;
+  grid-template-columns: repeat(var(--velu-card-cols, 2), minmax(0, 1fr));
+  gap: 0.75rem !important;
 }
 
-.velu-card-group {
-  grid-template-columns: repeat(var(--velu-card-cols, 2), minmax(0, 1fr));
+.velu-card-group > [data-card] {
+  margin: 0 !important;
 }
 
 .velu-card-image {
@@ -441,6 +582,14 @@ nextjs-portal {
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+
+[data-card].velu-card + [data-card].velu-card {
+  margin-top: 0.75rem !important;
+}
+
+.velu-card-group > [data-card].velu-card + [data-card].velu-card {
+  margin-top: 0 !important;
 }
 
 [data-card].velu-card > div:last-child {
@@ -965,13 +1114,596 @@ nextjs-portal {
 }
 
 .velu-endpoint,
-.velu-api-playground,
 .velu-openapi,
 .velu-snippet {
   border: 1px solid var(--color-fd-border);
   border-radius: 0.65rem;
   padding: 0.8rem;
   margin: 1rem 0;
+}
+
+.velu-api-playground {
+  border: 0;
+  border-radius: 0;
+  padding: 0.35rem 0.35rem 0.6rem;
+}
+
+.velu-openapi-operation-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+}
+
+.velu-openapi-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.velu-openapi-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.velu-openapi-field-group + .velu-openapi-field-group {
+  margin-top: 0.6rem;
+}
+
+.velu-openapi-field-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.velu-openapi-parameter-group > h2,
+.velu-openapi-parameter-group > h3 {
+  margin: 0;
+}
+
+.velu-openapi-parameter-group > .velu-openapi-field-list {
+  border-top: 1px solid color-mix(in oklab, var(--color-fd-foreground) 14%, transparent);
+  padding-top: 0.95rem;
+}
+
+.velu-openapi-field-list > div + div {
+  border-top: 1px solid color-mix(in oklab, var(--color-fd-foreground) 18%, transparent);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.velu-openapi-complex-field + .velu-openapi-complex-field {
+  margin-top: 0.75rem;
+}
+
+.velu-openapi-child-attrs {
+  margin-top: 0.55rem;
+  border: 1px solid color-mix(in oklab, var(--color-fd-foreground) 16%, transparent);
+  border-radius: 0.72rem;
+  overflow: hidden;
+}
+
+.velu-openapi-child-attrs-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.83rem;
+  font-weight: 500;
+  color: var(--color-fd-muted-foreground);
+  border-bottom: 1px solid color-mix(in oklab, var(--color-fd-foreground) 14%, transparent);
+  user-select: none;
+}
+
+.velu-openapi-child-attrs-summary::-webkit-details-marker {
+  display: none;
+}
+
+.velu-openapi-child-attrs-summary::before {
+  content: '\203A';
+  display: inline-block;
+  margin-right: 0.35rem;
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
+}
+
+.velu-openapi-child-attrs:not([open]) .velu-openapi-child-attrs-summary {
+  border-bottom: 0;
+}
+
+.velu-openapi-child-attrs:not([open]) .velu-openapi-child-attrs-summary::before {
+  transform: rotate(0deg);
+}
+
+.velu-openapi-child-attrs > .velu-openapi-field-list,
+.velu-openapi-child-variants {
+  padding: 0.55rem 0.65rem 0.65rem;
+}
+
+.velu-openapi-child-variant-list {
+  margin-bottom: 0.55rem;
+}
+
+.velu-openapi-child-variant-trigger {
+  border: 0;
+  border-radius: 0;
+  padding: 0.1rem 0.12rem 0.24rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.velu-openapi-child-variant-trigger[data-state='active'] {
+  color: var(--color-fd-primary);
+  border-bottom: 2px solid var(--color-fd-primary);
+}
+
+.velu-openapi-media-label {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+}
+
+.velu-openapi-field-description {
+  color: var(--color-fd-muted-foreground);
+}
+
+.velu-openapi-response-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border-top: 1px solid color-mix(in oklab, var(--color-fd-foreground) 14%, transparent);
+  padding-top: 0.75rem;
+}
+
+.velu-openapi-response-group:first-of-type {
+  border-top: 0;
+  padding-top: 0.2rem;
+}
+
+.velu-openapi-response-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.velu-openapi-response-section {
+  margin-top: 0.25rem;
+}
+
+.velu-openapi-response-panel {
+  border: 0;
+}
+
+.velu-openapi-response-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--color-fd-foreground) 14%, transparent);
+  padding-bottom: 0.55rem;
+  margin-bottom: 0.65rem;
+}
+
+.velu-openapi-response-header h2,
+.velu-openapi-response-header h3 {
+  margin: 0;
+}
+
+.velu-openapi-response-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.15rem;
+  margin-left: auto;
+}
+
+.velu-openapi-response-status-list {
+  border: 0;
+  background: transparent;
+}
+
+.velu-openapi-response-status-list .velu-openapi-response-status-trigger {
+  border: 0;
+  border-radius: 0;
+  padding: 0.1rem 0.12rem 0.26rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.velu-openapi-response-status-list .velu-openapi-response-status-trigger[data-state='active'] {
+  color: var(--color-fd-primary);
+  border-bottom: 2px solid var(--color-fd-primary);
+}
+
+.velu-openapi-response-status-list .velu-openapi-response-status-trigger + .velu-openapi-response-status-trigger {
+  margin-left: 0.35rem;
+}
+
+.velu-openapi-response-content-type {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.velu-openapi-response-panel .velu-openapi-response-head {
+  margin-bottom: 0.5rem;
+}
+
+.velu-openapi-response-panel .velu-openapi-response-group {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.velu-openapi-response-empty {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.velu-openapi-response-headers {
+  margin-bottom: 0.85rem;
+}
+
+.velu-openapi-response-headers h3 {
+  margin: 0 0 0.5rem;
+}
+
+.velu-openapi-response-headers > .velu-openapi-field-list {
+  border-top: 1px solid color-mix(in oklab, var(--color-fd-foreground) 14%, transparent);
+  padding-top: 0.75rem;
+}
+
+.velu-openapi-body-section {
+  gap: 0.65rem;
+}
+
+.velu-openapi-body-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--color-fd-foreground) 14%, transparent);
+  padding-bottom: 0.55rem;
+  margin-bottom: 0.2rem;
+}
+
+.velu-openapi-body-header h2,
+.velu-openapi-body-header h3 {
+  margin: 0;
+}
+
+.velu-openapi-body-content-type {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.velu-openapi-body-media-list {
+  border: 0;
+  background: transparent;
+}
+
+.velu-openapi-body-media-trigger {
+  border: 0;
+  border-radius: 0;
+  padding: 0.1rem 0.12rem 0.26rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.velu-openapi-body-media-trigger[data-state='active'] {
+  color: var(--color-fd-primary);
+  border-bottom: 2px solid var(--color-fd-primary);
+}
+
+.velu-openapi-body-section > .velu-openapi-field-list {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.velu-openapi-response-media-switch-header {
+  margin-bottom: 0.55rem;
+}
+
+.velu-openapi-response-media-list {
+  border: 0;
+  background: transparent;
+}
+
+.velu-openapi-response-media-trigger {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.14rem 0.5rem 0.2rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-fd-muted-foreground);
+}
+
+.velu-openapi-response-media-trigger[data-state='active'] {
+  color: var(--color-fd-foreground);
+  background: color-mix(in oklab, var(--color-fd-foreground) 10%, transparent);
+}
+
+.velu-openapi-response-examples {
+  margin-bottom: 0.7rem;
+}
+
+.velu-openapi-response-example-switch-header {
+  margin-bottom: 0.55rem;
+}
+
+.velu-openapi-response-example-list {
+  border: 0;
+  background: transparent;
+  flex-wrap: wrap;
+}
+
+.velu-openapi-response-example-trigger {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.14rem 0.5rem 0.2rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-fd-muted-foreground);
+}
+
+.velu-openapi-response-example-trigger[data-state='active'] {
+  color: var(--color-fd-foreground);
+  background: color-mix(in oklab, var(--color-fd-foreground) 10%, transparent);
+}
+
+.velu-openapi-response-example-code {
+  margin-bottom: 0.65rem;
+}
+
+.velu-openapi-response-example-code pre {
+  margin: 0;
+}
+
+.velu-openapi-field-depth-1 {
+  padding-left: 0.85rem;
+}
+
+.velu-openapi-field-depth-2 {
+  padding-left: 1.5rem;
+}
+
+.velu-openapi-field-depth-3,
+.velu-openapi-field-depth-4 {
+  padding-left: 2rem;
+}
+
+.velu-manual-api {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  margin: 1rem 0;
+  background: color-mix(in oklab, var(--color-fd-background) 92%, var(--color-fd-card));
+}
+
+.velu-manual-api-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.velu-manual-api-method {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-fd-primary) 40%, transparent);
+  color: var(--color-fd-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.12rem 0.5rem;
+}
+
+.velu-manual-api-url {
+  font-size: 0.82rem;
+  word-break: break-all;
+}
+
+.velu-manual-api-send {
+  margin-left: auto;
+  border: 1px solid color-mix(in oklab, var(--color-fd-primary) 35%, transparent);
+  background: color-mix(in oklab, var(--color-fd-primary) 16%, transparent);
+  color: var(--color-fd-primary);
+  border-radius: 0.45rem;
+  padding: 0.22rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.velu-manual-api-send:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.velu-manual-api-auth-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0.7rem;
+}
+
+.velu-manual-api-auth {
+  display: grid;
+  gap: 0.28rem;
+  margin-top: 0.7rem;
+}
+
+.velu-manual-api-auth > span {
+  font-size: 0.73rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.velu-manual-api-auth > input {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.45rem;
+  padding: 0.42rem 0.56rem;
+  font-size: 0.82rem;
+  background: color-mix(in oklab, var(--color-fd-background) 92%, transparent);
+}
+
+.velu-manual-api-error {
+  margin: 0.75rem 0 0;
+  color: #e11d48;
+  font-size: 0.8rem;
+}
+
+.velu-manual-api-result {
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--color-fd-border);
+  padding-top: 0.6rem;
+}
+
+.velu-manual-api-status {
+  font-size: 0.78rem;
+  color: var(--color-fd-muted-foreground);
+  margin-bottom: 0.35rem;
+}
+
+.velu-manual-api-result pre {
+  margin: 0;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.55rem;
+  padding: 0.7rem;
+  overflow: auto;
+  background: color-mix(in oklab, var(--color-fd-background) 85%, var(--color-fd-card));
+}
+
+.velu-manual-api-simple {
+  border-style: dashed;
+}
+
+@media (max-width: 768px) {
+  .velu-manual-api-auth-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .velu-manual-api-send {
+    margin-left: 0;
+  }
+}
+
+.velu-openapi-warning {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.65rem;
+  padding: 0.75rem 0.9rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.velu-openapi-schema-wrapper {
+  margin: 1rem 0;
+}
+
+.velu-openapi-schema {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.65rem;
+  padding: 0.9rem;
+}
+
+.velu-openapi-schema > h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.velu-openapi-schema > p {
+  margin: 0 0 0.6rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.velu-openapi-schema-json {
+  margin: 0;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.55rem;
+  padding: 0.7rem;
+  overflow: auto;
+  background: color-mix(in oklab, var(--color-fd-background) 85%, var(--color-fd-card));
+}
+
+.velu-api-toc-rail {
+  margin-top: 0.35rem;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.velu-api-toc-rail #velu-api-toc-rail-host {
+  width: 100%;
+  min-width: 0;
+}
+
+.velu-api-toc-example {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.velu-openapi-example-source {
+  display: none;
+}
+
+#velu-api-toc-rail-host .velu-openapi-example-source {
+  display: block;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+#velu-api-toc-rail-host .velu-openapi-example-source > * {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+#velu-api-toc-rail-host .prose-no-margin,
+#velu-api-toc-rail-host [role='tablist'],
+#velu-api-toc-rail-host [role='tabpanel'],
+#velu-api-toc-rail-host figure {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+#velu-api-toc-rail-host [role='tabpanel'] > figure {
+  margin: 0 !important;
+  border-radius: 0.65rem !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+#velu-api-toc-rail-host .velu-openapi-example-source pre,
+#velu-api-toc-rail-host .velu-openapi-example-source .shiki,
+#velu-api-toc-rail-host .velu-openapi-example-source [data-codeblock] {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+#velu-api-toc-rail-host .fd-scroll-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  --padding-right: calc(var(--spacing) * 4) !important;
+}
+
+#nd-toc:has(.velu-api-toc-rail) > :not(.velu-api-toc-rail) {
+  display: none !important;
 }
 
 .velu-update {
@@ -1049,9 +1781,41 @@ nextjs-portal {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  padding-left: 1rem;
   position: sticky;
   top: calc(var(--fd-nav-height, 0px) + 0.75rem);
   align-self: start;
+}
+
+.velu-update-anchor {
+  position: absolute;
+  left: 0;
+  top: 0.33rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.85rem;
+  height: 0.85rem;
+  color: var(--color-fd-muted-foreground);
+  text-decoration: none;
+  opacity: 0.75;
+  visibility: visible;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.velu-update-anchor svg {
+  width: 0.82rem;
+  height: 0.82rem;
+}
+
+.velu-update:hover .velu-update-anchor,
+.velu-update:focus-within .velu-update-anchor,
+.velu-update-anchor:focus-visible {
+  opacity: 1;
+}
+
+.velu-update-anchor:hover {
+  color: var(--color-fd-foreground);
 }
 
 .velu-update-label {
@@ -1078,19 +1842,19 @@ nextjs-portal {
 }
 
 .velu-update-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+  display: grid;
+  gap: 0.18rem;
 }
 
 .velu-update-tag {
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--color-fd-border);
-  border-radius: 999px;
+  border: 0;
+  border-radius: 0;
   font-size: 0.72rem;
-  padding: 0.08rem 0.45rem;
-  color: var(--color-fd-muted-foreground);
+  line-height: 1.3;
+  padding: 0;
+  color: color-mix(in oklab, var(--color-fd-foreground) 82%, var(--color-fd-muted-foreground));
 }
 
 .velu-update-content {
@@ -1105,6 +1869,62 @@ nextjs-portal {
   margin-bottom: 0;
 }
 
+.velu-update[hidden] {
+  display: none !important;
+}
+
+.velu-changelog-filter-block {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.velu-changelog-filter-heading {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--color-fd-foreground);
+}
+
+.velu-changelog-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.velu-changelog-filter-host {
+  margin-bottom: 0.4rem;
+}
+
+#nd-toc.velu-changelog-filters-only > h3,
+#nd-toc.velu-changelog-filters-only > .relative {
+  display: none !important;
+}
+
+.velu-changelog-filter {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.22rem 0.65rem;
+  font-size: 0.74rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: color-mix(in oklab, var(--color-fd-foreground) 82%, var(--color-fd-muted-foreground));
+  background: color-mix(in oklab, var(--color-fd-muted-foreground) 14%, transparent);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+
+.velu-changelog-filter:hover {
+  border-color: color-mix(in oklab, var(--color-fd-primary) 35%, transparent);
+  color: var(--color-fd-foreground);
+  background: color-mix(in oklab, var(--color-fd-muted-foreground) 18%, transparent);
+}
+
+.velu-changelog-filter.active {
+  color: var(--color-fd-primary);
+  border-color: color-mix(in oklab, var(--color-fd-primary) 35%, transparent);
+  background: color-mix(in oklab, var(--color-fd-primary) 16%, transparent);
+}
+
 @media (max-width: 768px) {
   .velu-update {
     grid-template-columns: 1fr;
@@ -1113,6 +1933,20 @@ nextjs-portal {
   .velu-update-meta {
     position: static;
     top: auto;
+    padding-left: 0;
+  }
+
+  .velu-update-anchor {
+    position: static;
+    width: 1rem;
+    height: 1rem;
+    margin-bottom: -0.15rem;
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .velu-changelog-filters {
+    margin-bottom: 0.45rem;
   }
 }
 
@@ -1226,6 +2060,85 @@ nextjs-portal {
   margin: 0 !important;
   border-radius: 0.16rem;
   object-fit: contain;
+}
+
+/* Fallback utilities for imported MDX media classes. */
+#nd-page .w-full {
+  width: 100% !important;
+}
+
+#nd-page .h-96 {
+  height: 24rem !important;
+}
+
+#nd-page .rounded-lg {
+  border-radius: 0.5rem !important;
+}
+
+#nd-page .rounded-xl {
+  border-radius: 0.75rem !important;
+}
+
+#nd-page :is(img, iframe, video).aspect-video {
+  width: 100% !important;
+  aspect-ratio: 16 / 9 !important;
+  height: auto !important;
+  display: block;
+}
+
+#nd-page iframe {
+  border: 0;
+}
+
+#nd-page img.velu-image-zoomable,
+#nd-page .velu-frame-content img.velu-image-zoomable {
+  cursor: zoom-in !important;
+}
+
+#nd-page img.velu-image-zoomable-fallback,
+#nd-page .velu-frame-content img.velu-image-zoomable-fallback {
+  cursor: zoom-in !important;
+}
+
+.velu-image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(0, 0, 0, 0.82);
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+
+.velu-image-lightbox-img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(94vw, 1500px);
+  max-height: 90vh;
+  border-radius: 0.75rem;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  cursor: auto;
+}
+
+.velu-image-lightbox-close {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.58);
+  color: #fff;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  font-size: 1.45rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 
 .velu-view-content > :first-child {
@@ -2202,11 +3115,13 @@ nextjs-portal {
   line-height: 1.4;
 }
 
-.velu-tree {
+.velu-tree,
+.velu-files {
   margin: 1rem 0;
 }
 
-.velu-tree .velu-tree-file {
+.velu-tree .velu-tree-file,
+.velu-files .velu-tree-file {
   font-family: var(--font-fd-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 

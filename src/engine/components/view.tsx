@@ -121,6 +121,8 @@ function writeSharedSelected(title: string) {
 
 function broadcastSelected(title: string) {
   if (typeof window === "undefined") return;
+  const existing = readSharedSelected();
+  if (existing && normalizeTitle(existing) === normalizeTitle(title)) return;
   writeSharedSelected(title);
   window.dispatchEvent(new CustomEvent(VELU_TAB_SYNC_EVENT, { detail: { label: title } }));
 }

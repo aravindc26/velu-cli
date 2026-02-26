@@ -38,6 +38,8 @@ function writeSharedLabel(label: string) {
 
 function broadcastLabel(label: string) {
   if (typeof window === "undefined") return;
+  const existing = readSharedLabel();
+  if (existing && normalizeLabel(existing) === normalizeLabel(label)) return;
   writeSharedLabel(label);
   window.dispatchEvent(new CustomEvent(VELU_TAB_SYNC_EVENT, { detail: { label } }));
 }

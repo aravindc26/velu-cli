@@ -11,10 +11,57 @@
   margin: 0;
 }
 
+.velu-title-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.velu-page-deprecated-badge {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: 0.65rem;
+}
+
+.velu-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  margin-top: 0.35rem;
+}
+
+.velu-rss-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-fd-border, #27272a);
+  border-radius: 999px;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  color: var(--color-fd-muted-foreground, #a1a1aa);
+  text-decoration: none;
+  line-height: 1;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+
+.velu-rss-button svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.velu-rss-button:hover {
+  color: var(--color-fd-primary, #f46130);
+  border-color: color-mix(in oklab, var(--color-fd-primary, #f46130) 45%, var(--color-fd-border, #27272a));
+  background: color-mix(in oklab, var(--color-fd-primary, #f46130) 10%, transparent);
+}
+
 .velu-copy-page-container {
   position: relative;
   flex-shrink: 0;
-  margin-top: 0.35rem;
+  margin-top: 0;
 }
 
 .velu-copy-split-btn {
@@ -129,4 +176,15 @@
 .velu-external-arrow {
   font-size: 0.75em;
   opacity: 0.5;
+}
+
+@media (max-width: 640px) {
+  .velu-title-row {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .velu-title-actions {
+    margin-top: 0;
+  }
 }

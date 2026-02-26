@@ -3,6 +3,39 @@ import { metaSchema, pageSchema } from 'fumadocs-core/source/schema';
 import { transformerMetaHighlight } from '@shikijs/transformers';
 
 function remarkCodeFilenameToTitle() {
+  const booleanMetaFlags = new Set([
+    'wrap',
+    'copy',
+    'nocopy',
+    'lineNumbers',
+    'linenumbers',
+    'showLineNumbers',
+  ]);
+
+  function quoteTitle(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
+  function ensureTitleMeta(meta: string): string {
+    const trimmed = meta.trim();
+    if (!trimmed) return trimmed;
+    if (/\btitle\s*=/.test(trimmed)) return trimmed;
+
+    const fileWithRest = trimmed.match(/^([^\s]+?\.[a-z0-9_-]+)(\s+.*)?$/i);
+    if (fileWithRest) {
+      const file = fileWithRest[1];
+      const rest = (fileWithRest[2] ?? '').trim();
+      return rest ? `title="${quoteTitle(file)}" ${rest}` : `title="${quoteTitle(file)}"`;
+    }
+
+    if (!trimmed.includes('=') && !trimmed.includes('{') && !trimmed.includes('}')) {
+      if (booleanMetaFlags.has(trimmed)) return trimmed;
+      return `title="${quoteTitle(trimmed)}"`;
+    }
+
+    return trimmed;
+  }
+
   function visit(node: any) {
     if (!node || typeof node !== 'object') return;
 
@@ -10,9 +43,7 @@ function remarkCodeFilenameToTitle() {
       let meta = node.meta.trim();
       // Mint-style fence syntax: ```lang filename.ext
       // Convert it into title metadata so code tabs can use file names.
-      if (meta && !meta.includes('=') && /\.[a-z0-9_-]+$/i.test(meta)) {
-        meta = `title="${meta}"`;
-      }
+      meta = ensureTitleMeta(meta);
 
       // Mint-style line highlight syntax: highlight=1 or highlight="1,3-5"
       // Convert to Shiki meta-highlight format: {1,3-5}

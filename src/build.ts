@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, cpSync, existsSync, rmSync, readdirSync } from "node:fs";
-import { join, dirname, relative } from "node:path";
+import { join, dirname, relative, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 import { generateThemeCss, resolveThemeName, type VeluColors, type VeluStyling } from "./themes.js";
 import { normalizeConfigNavigation } from "./navigation-normalize.js";
 
@@ -12,6 +13,18 @@ const DEV_ENGINE_DIR = join(__dirname, "..", "src", "engine");
 const ENGINE_DIR = existsSync(DEV_ENGINE_DIR) ? DEV_ENGINE_DIR : PACKAGED_ENGINE_DIR;
 const PRIMARY_CONFIG_NAME = "docs.json";
 const LEGACY_CONFIG_NAME = "velu.json";
+const SOURCE_MIRROR_DIR = "velu-imports";
+
+const SOURCE_MIRROR_EXTENSIONS = new Set([
+  ".md", ".mdx", ".jsx", ".js", ".tsx", ".ts",
+  ".json", ".yaml", ".yml", ".css",
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
+  ".woff", ".woff2", ".ttf", ".eot",
+  ".mp4", ".webm", ".mp3", ".wav",
+  ".pdf", ".txt", ".xml", ".csv", ".zip",
+]);
+
+const IMPORT_REWRITE_EXTENSIONS = new Set([".md", ".mdx", ".jsx", ".js", ".tsx", ".ts"]);
 
 function resolveConfigPath(docsDir: string): string {
   const primary = join(docsDir, PRIMARY_CONFIG_NAME);
@@ -39,6 +52,8 @@ interface VeluAnchor {
   href?: string;
   icon?: string;
   iconType?: string;
+  openapi?: VeluOpenApiSource;
+  version?: string;
   color?: {
     light: string;
     dark: string;
@@ -59,6 +74,8 @@ interface VeluGroup {
   slug: string;
   icon?: string;
   iconType?: string;
+  version?: string;
+  openapi?: VeluOpenApiSource;
   expanded?: boolean;
   description?: string;
   hidden?: boolean;
@@ -69,6 +86,7 @@ interface VeluMenuItem {
   item: string;
   icon?: string;
   iconType?: string;
+  openapi?: VeluOpenApiSource;
   groups?: VeluGroup[];
   pages?: (string | VeluSeparator | VeluLink)[];
 }
@@ -79,6 +97,8 @@ interface VeluTab {
   icon?: string;
   iconType?: string;
   href?: string;
+  openapi?: VeluOpenApiSource;
+  version?: string;
   pages?: (string | VeluSeparator | VeluLink)[];
   groups?: VeluGroup[];
   menu?: VeluMenuItem[];
@@ -86,6 +106,7 @@ interface VeluTab {
 
 interface VeluLanguageNav {
   language: string;
+  openapi?: VeluOpenApiSource;
   tabs: VeluTab[];
 }
 
@@ -93,13 +114,21 @@ interface VeluProductNav {
   product: string;
   icon?: string;
   iconType?: string;
+  openapi?: VeluOpenApiSource;
   tabs?: VeluTab[];
   pages?: (string | VeluSeparator | VeluLink)[];
 }
 
 interface VeluVersionNav {
   version: string;
+  openapi?: VeluOpenApiSource;
   tabs: VeluTab[];
+}
+
+interface VeluRedirect {
+  source: string;
+  destination: string;
+  permanent?: boolean;
 }
 
 interface VeluConfig {
@@ -108,8 +137,11 @@ interface VeluConfig {
   colors?: VeluColors;
   appearance?: "system" | "light" | "dark";
   styling?: VeluStyling;
+  openapi?: VeluOpenApiSource;
   languages?: string[];
+  redirects?: VeluRedirect[];
   navigation: {
+    openapi?: VeluOpenApiSource;
     tabs?: VeluTab[];
     languages?: VeluLanguageNav[];
     products?: VeluProductNav[];
@@ -121,6 +153,13 @@ interface VeluConfig {
     };
   };
 }
+
+interface VeluOpenApiConfigObject {
+  source?: string | string[];
+  directory?: string;
+}
+
+type VeluOpenApiSource = string | string[] | VeluOpenApiConfigObject;
 
 function isSeparator(item: unknown): item is VeluSeparator {
   return typeof item === "object" && item !== null && "separator" in item;
@@ -134,6 +173,226 @@ function isGroup(item: unknown): item is VeluGroup {
   return typeof item === "object" && item !== null && "group" in item;
 }
 
+const HTTP_METHODS = new Set([
+  "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD", "TRACE", "CONNECT", "WEBHOOK",
+]);
+const OPENAPI_PATH_METHODS = new Set(["get", "post", "put", "patch", "delete", "options", "head", "trace"]);
+
+interface ParsedOpenApiOperationRef {
+  spec?: string;
+  method: string;
+  endpoint: string;
+  kind?: "path" | "webhook";
+  title?: string;
+  description?: string;
+  deprecated?: boolean;
+  version?: string;
+  content?: string;
+}
+
+function resolveDefaultOpenApiSpec(openapi: VeluOpenApiSource | undefined): string | undefined {
+  const source = extractOpenApiSource(openapi);
+  if (typeof source === "string") {
+    const trimmed = source.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  if (Array.isArray(source)) {
+    const first = source.find((entry) => typeof entry === "string" && entry.trim().length > 0);
+    return typeof first === "string" ? first.trim() : undefined;
+  }
+  return undefined;
+}
+
+function parseOpenApiOperationRef(value: string, inheritedSpec?: string): ParsedOpenApiOperationRef | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const withSpec = trimmed.match(/^(\S+)\s+([A-Za-z]+)\s+(.+)$/);
+  if (withSpec) {
+    const method = withSpec[2].toUpperCase();
+    const endpoint = withSpec[3].trim();
+    if (!HTTP_METHODS.has(method)) return null;
+    if (method === "WEBHOOK") {
+      if (!endpoint) return null;
+      return { spec: withSpec[1].trim(), method, endpoint, kind: "webhook" };
+    }
+    if (!endpoint.startsWith("/")) return null;
+    return { spec: withSpec[1].trim(), method, endpoint, kind: "path" };
+  }
+
+  const noSpec = trimmed.match(/^([A-Za-z]+)\s+(.+)$/);
+  if (!noSpec) return null;
+  const method = noSpec[1].toUpperCase();
+  const endpoint = noSpec[2].trim();
+  if (!HTTP_METHODS.has(method)) return null;
+  if (method === "WEBHOOK") {
+    if (!endpoint) return null;
+    return { spec: inheritedSpec, method, endpoint, kind: "webhook" };
+  }
+  if (!endpoint.startsWith("/")) return null;
+  return { spec: inheritedSpec, method, endpoint, kind: "path" };
+}
+
+function slugFromOpenApiOperation(method: string, endpoint: string): string {
+  const cleaned = endpoint
+    .toLowerCase()
+    .replace(/^\/+/, "")
+    .replace(/[{}]/g, "")
+    .replace(/[^a-z0-9/._-]+/g, "-")
+    .replace(/\/+/g, "-")
+    .replace(/[-_.]{2,}/g, "-")
+    .replace(/^[-_.]+|[-_.]+$/g, "");
+  const body = cleaned || "endpoint";
+  return `${method.toLowerCase()}-${body}`;
+}
+
+function resolveOpenApiSpecList(openapi: VeluOpenApiSource | undefined): string[] {
+  const source = extractOpenApiSource(openapi);
+  if (typeof source === "string") {
+    const trimmed = source.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  if (Array.isArray(source)) {
+    return source
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+  return [];
+}
+
+function extractOpenApiSource(openapi: VeluOpenApiSource | undefined): string | string[] | undefined {
+  if (typeof openapi === "string" || Array.isArray(openapi)) return openapi;
+  if (openapi && typeof openapi === "object") {
+    const source = (openapi as VeluOpenApiConfigObject).source;
+    if (typeof source === "string" || Array.isArray(source)) return source;
+  }
+  return undefined;
+}
+
+function resolveOpenApiDirectory(openapi: VeluOpenApiSource | undefined): string | undefined {
+  if (!openapi || typeof openapi !== "object" || Array.isArray(openapi)) return undefined;
+  const raw = (openapi as VeluOpenApiConfigObject).directory;
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function parseOpenApiDocument(rawSource: string): Record<string, unknown> | null {
+  const source = rawSource.trim();
+  if (!source) return null;
+  try {
+    const parsed = JSON.parse(source);
+    if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
+  } catch {
+    // fall through and attempt YAML parse.
+  }
+  try {
+    const parsed = parseYaml(source);
+    if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function readMintMetadata(operation: Record<string, unknown>) {
+  const xMint = operation["x-mint"];
+  if (!xMint || typeof xMint !== "object") return {};
+  const metadata = (xMint as Record<string, unknown>).metadata;
+  const content = (xMint as Record<string, unknown>).content;
+  const meta = metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>) : {};
+  return {
+    title: typeof meta.title === "string" ? meta.title : undefined,
+    description: typeof meta.description === "string" ? meta.description : undefined,
+    deprecated: typeof meta.deprecated === "boolean" ? meta.deprecated : undefined,
+    version: typeof meta.version === "string" ? meta.version : undefined,
+    content: typeof content === "string" ? content : undefined,
+  };
+}
+
+function pickOperationMethod(pathItem: Record<string, unknown>): string | undefined {
+  for (const method of OPENAPI_PATH_METHODS) {
+    const operation = pathItem[method];
+    if (operation && typeof operation === "object") return method.toUpperCase();
+  }
+  return undefined;
+}
+
+function loadOpenApiOperations(specSource: string, docsDir: string): ParsedOpenApiOperationRef[] {
+  if (/^https?:\/\//i.test(specSource) || specSource.startsWith("file://")) return [];
+
+  const resolvedPath = specSource.startsWith("/")
+    ? join(docsDir, specSource.replace(/^\/+/, ""))
+    : resolve(docsDir, specSource);
+  if (!existsSync(resolvedPath)) return [];
+
+  const parsed = parseOpenApiDocument(readFileSync(resolvedPath, "utf-8"));
+  if (!parsed) return [];
+
+  const paths = parsed.paths;
+  const webhooks = parsed.webhooks;
+
+  const output: ParsedOpenApiOperationRef[] = [];
+  if (paths && typeof paths === "object") {
+    for (const [endpoint, methods] of Object.entries(paths as Record<string, unknown>)) {
+      if (!endpoint.startsWith("/") || !methods || typeof methods !== "object") continue;
+      for (const method of Object.keys(methods as Record<string, unknown>)) {
+        const normalized = method.toLowerCase();
+        if (!OPENAPI_PATH_METHODS.has(normalized)) continue;
+        const operation = (methods as Record<string, unknown>)[method];
+        if (!operation || typeof operation !== "object") continue;
+        if ((operation as Record<string, unknown>)["x-hidden"] === true) continue;
+        const mintMeta = readMintMetadata(operation as Record<string, unknown>);
+        output.push({
+          kind: "path",
+          spec: specSource,
+          method: normalized.toUpperCase(),
+          endpoint,
+          title: mintMeta.title ?? (typeof (operation as Record<string, unknown>).summary === "string" ? String((operation as Record<string, unknown>).summary) : undefined),
+          description: mintMeta.description ?? (typeof (operation as Record<string, unknown>).description === "string" ? String((operation as Record<string, unknown>).description) : undefined),
+          deprecated: mintMeta.deprecated ?? ((operation as Record<string, unknown>).deprecated === true),
+          version: mintMeta.version,
+          content: mintMeta.content,
+        });
+      }
+    }
+  }
+
+  if (webhooks && typeof webhooks === "object") {
+    for (const [webhookName, pathItem] of Object.entries(webhooks as Record<string, unknown>)) {
+      if (!pathItem || typeof pathItem !== "object") continue;
+      const resolvedMethod = pickOperationMethod(pathItem as Record<string, unknown>);
+      if (!resolvedMethod) continue;
+      const operation = (pathItem as Record<string, unknown>)[resolvedMethod.toLowerCase()];
+      if (!operation || typeof operation !== "object") continue;
+      if ((operation as Record<string, unknown>)["x-hidden"] === true) continue;
+      const mintMeta = readMintMetadata(operation as Record<string, unknown>);
+      output.push({
+        kind: "webhook",
+        spec: specSource,
+        method: "WEBHOOK",
+        endpoint: webhookName,
+        title: mintMeta.title ?? (typeof (operation as Record<string, unknown>).summary === "string" ? String((operation as Record<string, unknown>).summary) : undefined),
+        description: mintMeta.description ?? (typeof (operation as Record<string, unknown>).description === "string" ? String((operation as Record<string, unknown>).description) : undefined),
+        deprecated: mintMeta.deprecated ?? ((operation as Record<string, unknown>).deprecated === true),
+        version: mintMeta.version,
+        content: mintMeta.content,
+      });
+    }
+  }
+  return output;
+}
+
+function normalizeOpenApiSpecForFrontmatter(spec: string | undefined): string | undefined {
+  if (!spec) return undefined;
+  const trimmed = spec.trim();
+  if (!trimmed) return undefined;
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("file://")) return trimmed;
+  if (trimmed.startsWith("/")) return trimmed;
+  return `/${trimmed.replace(/^\.?\/*/, "")}`;
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function loadConfig(docsDir: string): VeluConfig {
@@ -142,9 +401,80 @@ function loadConfig(docsDir: string): VeluConfig {
   return normalizeConfigNavigation(parsed);
 }
 
+function isExternalDestination(value: string): boolean {
+  return /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(value);
+}
+
+function normalizePath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "/";
+  const withLeadingSlash = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  const collapsed = withLeadingSlash.replace(/\/{2,}/g, "/");
+  if (collapsed !== "/" && collapsed.endsWith("/")) return collapsed.slice(0, -1);
+  return collapsed;
+}
+
+function collectRedirectRules(config: VeluConfig): Array<{ source: string; destination: string; permanent: boolean }> {
+  const redirects = Array.isArray(config.redirects) ? config.redirects : [];
+  const output: Array<{ source: string; destination: string; permanent: boolean }> = [];
+
+  for (const redirect of redirects) {
+    if (!redirect || typeof redirect.source !== "string" || typeof redirect.destination !== "string") continue;
+    const source = redirect.source.trim();
+    const destination = redirect.destination.trim();
+    if (!source || !destination) continue;
+    if (/[?#]/.test(source) || /[?#]/.test(destination)) continue;
+
+    const normalizedSource = normalizePath(source);
+    const normalizedDestination = isExternalDestination(destination)
+      ? destination
+      : normalizePath(destination);
+    if (!isExternalDestination(normalizedDestination) && normalizedSource === normalizedDestination) continue;
+
+    output.push({
+      source: normalizedSource,
+      destination: normalizedDestination,
+      permanent: redirect.permanent !== false,
+    });
+  }
+
+  return output;
+}
+
+function writeRedirectArtifacts(config: VeluConfig, outDir: string) {
+  const redirects = collectRedirectRules(config);
+  const generatedDir = join(outDir, "generated");
+  mkdirSync(generatedDir, { recursive: true });
+
+  writeFileSync(
+    join(generatedDir, "redirects.ts"),
+    `const redirects: Array<{ source: string; destination: string; permanent: boolean }> = ${JSON.stringify(redirects, null, 2)};\n\nexport default redirects;\n`,
+    "utf-8"
+  );
+
+  const redirectsFilePath = join(outDir, "public", "_redirects");
+  if (redirects.length === 0) {
+    rmSync(redirectsFilePath, { force: true });
+    return;
+  }
+
+  const netlifyBody = redirects
+    .map((redirect) => `${redirect.source} ${redirect.destination} ${redirect.permanent ? 301 : 307}`)
+    .join("\n");
+  writeFileSync(redirectsFilePath, `${netlifyBody}\n`, "utf-8");
+}
+
 const STATIC_EXTENSIONS = new Set([
-  ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico", ".avif",
-  ".mp4", ".webm", ".ogg", ".mp3", ".wav", ".pdf", ".txt",
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
+  ".mp4", ".webm",
+  ".mp3", ".wav",
+  ".json", ".yaml", ".yml",
+  ".css",
+  ".js",
+  ".woff", ".woff2", ".ttf", ".eot",
+  ".pdf", ".txt",
+  ".xml", ".csv",
+  ".zip",
 ]);
 
 function copyStaticAssets(docsDir: string, publicDir: string) {
@@ -174,6 +504,215 @@ function copyStaticAssets(docsDir: string, publicDir: string) {
   walk(docsDir);
 }
 
+function toPosixPath(value: string): string {
+  return value.replace(/\\/g, "/");
+}
+
+function isInsideDocsRoot(docsDir: string, targetPath: string): boolean {
+  const relPath = relative(docsDir, targetPath);
+  if (!relPath) return true;
+  if (relPath.startsWith("..")) return false;
+  if (/^[a-zA-Z]:/.test(relPath)) return false;
+  return true;
+}
+
+function shouldMirrorSourceFile(filePath: string): boolean {
+  return SOURCE_MIRROR_EXTENSIONS.has(extname(filePath).toLowerCase());
+}
+
+function shouldRewriteImports(filePath: string): boolean {
+  return IMPORT_REWRITE_EXTENSIONS.has(extname(filePath).toLowerCase());
+}
+
+function rewriteImportSpecifier(
+  specifier: string,
+  sourceFilePath: string,
+  outputFilePath: string,
+  docsDir: string,
+  mirrorDir: string
+): string {
+  const match = specifier.match(/^([^?#]+)([?#].*)?$/);
+  if (!match) return specifier;
+  const rawPath = match[1];
+  const suffix = match[2] ?? "";
+
+  let resolvedSourcePath: string | null = null;
+  if (rawPath.startsWith("/")) {
+    resolvedSourcePath = join(docsDir, rawPath.slice(1));
+  } else if (rawPath.startsWith("./") || rawPath.startsWith("../")) {
+    resolvedSourcePath = resolve(dirname(sourceFilePath), rawPath);
+  }
+
+  if (!resolvedSourcePath || !isInsideDocsRoot(docsDir, resolvedSourcePath)) {
+    return specifier;
+  }
+
+  const relToDocs = relative(docsDir, resolvedSourcePath);
+  const mirrorTargetPath = join(mirrorDir, relToDocs);
+  const relFromOutput = relative(dirname(outputFilePath), mirrorTargetPath);
+  const normalizedRel = toPosixPath(relFromOutput || ".");
+  const withDotPrefix = normalizedRel.startsWith(".") ? normalizedRel : `./${normalizedRel}`;
+  return `${withDotPrefix}${suffix}`;
+}
+
+function rewriteImportsInContent(
+  content: string,
+  sourceFilePath: string,
+  outputFilePath: string,
+  docsDir: string,
+  mirrorDir: string
+): string {
+  const importFromPattern = /^(\s*import\s+)(.+?)(\s+from\s*["'])([^"']+)(["']\s*;?\s*)$/;
+  const exportFromPattern = /^(\s*export\b[^\n]*?\bfrom\s*["'])([^"']+)(["'])/;
+  const sideEffectImportPattern = /^(\s*import\s*["'])([^"']+)(["'])/;
+  const fencePattern = /^\s*(```+|~~~+)/;
+  const mdxOutput = (() => {
+    const ext = extname(outputFilePath).toLowerCase();
+    return ext === ".md" || ext === ".mdx";
+  })();
+
+  const lines = content.split(/\r?\n/);
+  const out: string[] = [];
+  let inFence = false;
+  let fenceChar = "";
+  let injectedMdxHelperImport = false;
+
+  function importPathFromSpecifier(specifier: string): string {
+    const match = specifier.match(/^([^?#]+)/);
+    return match ? match[1] : specifier;
+  }
+
+  function isLocalSpecifier(specifier: string): boolean {
+    return specifier.startsWith("/") || specifier.startsWith("./") || specifier.startsWith("../");
+  }
+
+  function isMdxSpecifier(specifier: string): boolean {
+    const base = importPathFromSpecifier(specifier).toLowerCase();
+    return base.endsWith(".mdx") || base.endsWith(".md");
+  }
+
+  function parseDefaultImport(clause: string): { defaultName?: string; namedPart?: string } {
+    const trimmed = clause.trim();
+    if (!trimmed || trimmed.startsWith("{") || trimmed.startsWith("*")) return {};
+
+    const commaIdx = trimmed.indexOf(",");
+    if (commaIdx === -1) {
+      if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(trimmed)) return { defaultName: trimmed };
+      return {};
+    }
+
+    const defaultName = trimmed.slice(0, commaIdx).trim();
+    const remainder = trimmed.slice(commaIdx + 1).trim();
+    if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(defaultName)) return {};
+    if (!remainder.startsWith("{") && !remainder.startsWith("*")) return {};
+    return { defaultName, namedPart: remainder };
+  }
+
+  for (const line of lines) {
+    const fenceMatch = line.match(fencePattern);
+    if (fenceMatch) {
+      const currentFenceChar = fenceMatch[1][0];
+      if (!inFence) {
+        inFence = true;
+        fenceChar = currentFenceChar;
+      } else if (fenceChar === currentFenceChar) {
+        inFence = false;
+        fenceChar = "";
+      }
+      out.push(line);
+      continue;
+    }
+
+    if (inFence) {
+      out.push(line);
+      continue;
+    }
+
+    const importMatch = line.match(importFromPattern);
+    if (importMatch) {
+      const importPrefix = importMatch[1];
+      const importClause = importMatch[2];
+      const fromPrefix = importMatch[3];
+      const specifier = importMatch[4];
+      const importSuffix = importMatch[5];
+      const rewritten = rewriteImportSpecifier(specifier, sourceFilePath, outputFilePath, docsDir, mirrorDir);
+      const { defaultName, namedPart } = parseDefaultImport(importClause);
+      const shouldWrapDefaultImport =
+        mdxOutput && Boolean(defaultName) && isLocalSpecifier(specifier) && isMdxSpecifier(specifier);
+
+      if (shouldWrapDefaultImport && defaultName) {
+        if (!injectedMdxHelperImport) {
+          out.push('import { getMDXComponents as __veluGetMDXComponents } from "@/mdx-components";');
+          injectedMdxHelperImport = true;
+        }
+
+        const rawName = `__veluRaw_${defaultName}`;
+        const wrappedClause = namedPart ? `${rawName}, ${namedPart}` : rawName;
+        out.push(`${importPrefix}${wrappedClause}${fromPrefix}${rewritten}${importSuffix}`);
+        out.push(`export const ${defaultName} = (props) => <${rawName} {...props} components={__veluGetMDXComponents()} />;`);
+        continue;
+      }
+
+      out.push(`${importPrefix}${importClause}${fromPrefix}${rewritten}${importSuffix}`);
+      continue;
+    }
+
+    let nextLine = line.replace(exportFromPattern, (_, prefix: string, specifier: string, suffix: string) => {
+      const rewritten = rewriteImportSpecifier(specifier, sourceFilePath, outputFilePath, docsDir, mirrorDir);
+      return `${prefix}${rewritten}${suffix}`;
+    });
+
+    nextLine = nextLine.replace(sideEffectImportPattern, (_, prefix: string, specifier: string, suffix: string) => {
+      const rewritten = rewriteImportSpecifier(specifier, sourceFilePath, outputFilePath, docsDir, mirrorDir);
+      return `${prefix}${rewritten}${suffix}`;
+    });
+
+    out.push(nextLine);
+  }
+
+  return out.join("\n");
+}
+
+function copyMirroredSourceFile(srcPath: string, docsDir: string, mirrorDir: string) {
+  if (!shouldMirrorSourceFile(srcPath)) return;
+  if (!isInsideDocsRoot(docsDir, srcPath)) return;
+
+  const relPath = relative(docsDir, srcPath);
+  const destPath = join(mirrorDir, relPath);
+  mkdirSync(dirname(destPath), { recursive: true });
+
+  if (shouldRewriteImports(srcPath)) {
+    const raw = readFileSync(srcPath, "utf-8");
+    const rewritten = rewriteImportsInContent(raw, srcPath, destPath, docsDir, mirrorDir);
+    writeFileSync(destPath, rewritten, "utf-8");
+    return;
+  }
+
+  copyFileSync(srcPath, destPath);
+}
+
+function rebuildSourceMirror(docsDir: string, mirrorDir: string) {
+  rmSync(mirrorDir, { recursive: true, force: true });
+  mkdirSync(mirrorDir, { recursive: true });
+
+  function walk(dir: string) {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      if (entry.name === "node_modules") continue;
+      const srcPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(srcPath);
+        continue;
+      }
+      if (!shouldMirrorSourceFile(srcPath)) continue;
+      copyMirroredSourceFile(srcPath, docsDir, mirrorDir);
+    }
+  }
+
+  walk(docsDir);
+}
+
 function pageLabelFromSlug(slug: string): string {
   const last = slug.split("/").pop()!;
   return last.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -184,8 +723,18 @@ function pageBasename(page: string): string {
 }
 
 interface PageMapping {
-  src: string;   // original page reference (file path without .md)
+  src: string;   // original page reference
   dest: string;  // destination path under content/docs (without extension)
+  kind: "file" | "openapi-operation";
+  openapiSpec?: string;
+  openapiMethod?: string;
+  openapiEndpoint?: string;
+  openapiKind?: "path" | "webhook";
+  title?: string;
+  description?: string;
+  deprecated?: boolean;
+  version?: string;
+  content?: string;
 }
 
 interface MetaFile {
@@ -199,13 +748,15 @@ interface BuildArtifacts {
   firstPage: string;
 }
 
-function buildArtifacts(config: VeluConfig): BuildArtifacts {
+function buildArtifacts(config: VeluConfig, docsDirForOpenApi?: string): BuildArtifacts {
   const pageMap: PageMapping[] = [];
   const metaFiles: MetaFile[] = [];
   const rootTabs = (config.navigation.tabs || []).filter((tab) => !tab.href);
   const rootPages = rootTabs.map((tab) => tab.slug);
+  const defaultOpenApiSpec = resolveDefaultOpenApiSpec(config.navigation.openapi ?? config.openapi);
   let firstPage = "quickstart";
   let hasFirstPage = false;
+  const usedDestinations = new Set<string>();
 
   function trackFirstPage(dest: string) {
     if (!hasFirstPage) {
@@ -225,19 +776,152 @@ function buildArtifacts(config: VeluConfig): BuildArtifacts {
     return String(item);
   }
 
-  function addGroup(group: VeluGroup, parentDir: string) {
+  function uniqueDestination(dest: string): string {
+    if (!usedDestinations.has(dest)) {
+      usedDestinations.add(dest);
+      return dest;
+    }
+    let count = 2;
+    while (usedDestinations.has(`${dest}-${count}`)) count += 1;
+    const candidate = `${dest}-${count}`;
+    usedDestinations.add(candidate);
+    return candidate;
+  }
+
+  function metaEntryForDestination(baseDir: string, destination: string): string {
+    const fromParts = baseDir.split("/").filter(Boolean);
+    const toParts = destination.split("/").filter(Boolean);
+
+    let index = 0;
+    while (index < fromParts.length && index < toParts.length && fromParts[index] === toParts[index]) {
+      index += 1;
+    }
+
+    const up = Array(fromParts.length - index).fill("..");
+    const down = toParts.slice(index);
+    const rel = [...up, ...down].join("/");
+    return rel || pageBasename(destination);
+  }
+
+  function resolveGenerationDestination(openapi: VeluOpenApiSource | undefined, fallback: string): string {
+    const override = resolveOpenApiDirectory(openapi);
+    if (!override) return fallback;
+    if (!fallback) return override;
+    if (override === fallback || override.startsWith(`${fallback}/`)) return override;
+    return `${fallback}/${override}`;
+  }
+
+  function toPageMapping(item: string, destDir: string, inheritedSpec?: string): PageMapping {
+    const parsedOpenApi = parseOpenApiOperationRef(item, inheritedSpec);
+    if (!parsedOpenApi) {
+      const basename = pageBasename(item);
+      const dest = uniqueDestination(`${destDir}/${basename}`);
+      return { src: item, dest, kind: "file" };
+    }
+
+    const slug = slugFromOpenApiOperation(parsedOpenApi.method, parsedOpenApi.endpoint);
+    const dest = uniqueDestination(`${destDir}/${slug}`);
+    return {
+      src: item,
+      dest,
+      kind: "openapi-operation",
+      openapiSpec: parsedOpenApi.spec,
+      openapiMethod: parsedOpenApi.method,
+      openapiEndpoint: parsedOpenApi.endpoint,
+      openapiKind: parsedOpenApi.kind,
+      title: parsedOpenApi.title,
+      description: parsedOpenApi.description,
+      deprecated: parsedOpenApi.deprecated,
+      version: parsedOpenApi.version,
+      content: parsedOpenApi.content,
+    };
+  }
+
+  function resolveInheritedVersion(value: unknown, inherited?: string): string | undefined {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+    return inherited;
+  }
+
+  function toPageMappingWithVersion(
+    item: string,
+    destDir: string,
+    inheritedSpec?: string,
+    inheritedVersion?: string,
+  ): PageMapping {
+    const mapping = toPageMapping(item, destDir, inheritedSpec);
+    if (mapping.kind === "openapi-operation" && mapping.version === undefined) {
+      mapping.version = inheritedVersion;
+    }
+    return mapping;
+  }
+
+  function toOperationMapping(
+    ref: ParsedOpenApiOperationRef,
+    destDir: string,
+    inheritedVersion?: string,
+  ): PageMapping {
+    const slug = slugFromOpenApiOperation(ref.method, ref.endpoint);
+    const dest = uniqueDestination(`${destDir}/${slug}`);
+    return {
+      src: `${ref.spec ? `${ref.spec} ` : ""}${ref.method} ${ref.endpoint}`,
+      dest,
+      kind: "openapi-operation",
+      openapiSpec: ref.spec,
+      openapiMethod: ref.method,
+      openapiEndpoint: ref.endpoint,
+      openapiKind: ref.kind,
+      title: ref.title,
+      description: ref.description,
+      deprecated: ref.deprecated,
+      version: ref.version ?? inheritedVersion,
+      content: ref.content,
+    };
+  }
+
+  function buildOpenApiMappings(
+    openapi: VeluOpenApiSource | undefined,
+    destDir: string,
+    fallbackSpec?: string,
+    inheritedVersion?: string,
+  ): PageMapping[] {
+    if (!docsDirForOpenApi) return [];
+    const specs = resolveOpenApiSpecList(openapi);
+    if (specs.length === 0 && fallbackSpec) specs.push(fallbackSpec);
+    if (specs.length === 0) return [];
+
+    const output: PageMapping[] = [];
+    const seen = new Set<string>();
+    for (const spec of specs) {
+      for (const operation of loadOpenApiOperations(spec, docsDirForOpenApi)) {
+        const key = `${operation.spec ?? ""}::${operation.kind ?? "path"}::${operation.method}::${operation.endpoint}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        output.push(toOperationMapping(operation, destDir, inheritedVersion));
+      }
+    }
+    return output;
+  }
+
+  function addGroup(
+    group: VeluGroup,
+    parentDir: string,
+    inheritedOpenApiSpec?: string,
+    inheritedVersion?: string,
+  ) {
     const groupDir = `${parentDir}/${group.slug}`;
     const pages: string[] = [];
+    const openApiSpec = resolveDefaultOpenApiSpec(group.openapi) ?? inheritedOpenApiSpec;
+    const groupVersion = resolveInheritedVersion(group.version, inheritedVersion);
 
-    for (const item of group.pages) {
+    const groupPageItems = Array.isArray(group.pages) ? group.pages : [];
+    for (const item of groupPageItems) {
       if (typeof item === "string") {
-        const basename = pageBasename(item);
-        const dest = `${groupDir}/${basename}`;
-        pageMap.push({ src: item, dest });
-        pages.push(basename);
-        trackFirstPage(dest);
+        const mapping = toPageMappingWithVersion(item, groupDir, openApiSpec, groupVersion);
+        pageMap.push(mapping);
+        pages.push(metaEntryForDestination(groupDir, mapping.dest));
+        trackFirstPage(mapping.dest);
       } else if (isGroup(item)) {
-        addGroup(item, groupDir);
+        addGroup(item, groupDir, openApiSpec, groupVersion);
         pages.push(item.hidden ? `!${item.slug}` : item.slug);
       } else if (isSeparator(item)) {
         pages.push(`---${item.separator}---`);
@@ -247,6 +931,16 @@ function buildArtifacts(config: VeluConfig): BuildArtifacts {
             ? `[${item.icon}][${item.label}](${item.href})`
             : `[${item.label}](${item.href})`
         );
+      }
+    }
+
+    if (groupPageItems.length === 0 && group.openapi !== undefined) {
+      const generatedDestDir = resolveGenerationDestination(group.openapi, groupDir);
+      const generatedMappings = buildOpenApiMappings(group.openapi, generatedDestDir, openApiSpec, groupVersion);
+      for (const mapping of generatedMappings) {
+        pageMap.push(mapping);
+        pages.push(metaEntryForDestination(groupDir, mapping.dest));
+        trackFirstPage(mapping.dest);
       }
     }
 
@@ -265,25 +959,37 @@ function buildArtifacts(config: VeluConfig): BuildArtifacts {
 
   for (const tab of rootTabs) {
     const tabPages: string[] = [];
+    const tabOpenApiSpec = resolveDefaultOpenApiSpec(tab.openapi) ?? defaultOpenApiSpec;
+    const tabVersion = resolveInheritedVersion(tab.version);
 
     if (tab.groups) {
       for (const group of tab.groups) {
-        addGroup(group, tab.slug);
+        addGroup(group, tab.slug, tabOpenApiSpec, tabVersion);
         tabPages.push(group.hidden ? `!${group.slug}` : group.slug);
       }
     }
 
-    if (tab.pages) {
-      for (const item of tab.pages) {
+    const tabPageItems = Array.isArray(tab.pages) ? tab.pages : [];
+    if (tabPageItems.length > 0) {
+      for (const item of tabPageItems) {
         if (typeof item === "string") {
-          const basename = pageBasename(item);
-          const dest = `${tab.slug}/${basename}`;
-          pageMap.push({ src: item, dest });
-          tabPages.push(basename);
-          trackFirstPage(dest);
+          const mapping = toPageMappingWithVersion(item, tab.slug, tabOpenApiSpec, tabVersion);
+          pageMap.push(mapping);
+          tabPages.push(metaEntryForDestination(tab.slug, mapping.dest));
+          trackFirstPage(mapping.dest);
         } else {
           tabPages.push(metaEntry(item));
         }
+      }
+    }
+
+    if ((tab.groups?.length ?? 0) === 0 && tabPageItems.length === 0 && tab.openapi !== undefined) {
+      const generatedDestDir = resolveGenerationDestination(tab.openapi, tab.slug);
+      const generatedMappings = buildOpenApiMappings(tab.openapi, generatedDestDir, tabOpenApiSpec, tabVersion);
+      for (const mapping of generatedMappings) {
+        pageMap.push(mapping);
+        tabPages.push(metaEntryForDestination(tab.slug, mapping.dest));
+        trackFirstPage(mapping.dest);
       }
     }
 
@@ -327,6 +1033,8 @@ function build(docsDir: string, outDir: string) {
   // ── 2. Create additional directories ─────────────────────────────────────
   mkdirSync(join(outDir, "content", "docs"), { recursive: true });
   mkdirSync(join(outDir, "public"), { recursive: true });
+  const sourceMirrorDir = join(outDir, SOURCE_MIRROR_DIR);
+  rebuildSourceMirror(docsDir, sourceMirrorDir);
 
   // ── 3. Copy config into the generated project ────────────────────────────
   copyFileSync(configPath, join(outDir, PRIMARY_CONFIG_NAME));
@@ -335,6 +1043,10 @@ function build(docsDir: string, outDir: string) {
 
   // ── 3b. Copy static assets from docs project into public/ ─────────────────
   copyStaticAssets(docsDir, join(outDir, "public"));
+  writeRedirectArtifacts(config, outDir);
+  if ((config.redirects ?? []).length > 0) {
+    console.log("↪️  Generated redirect artifacts");
+  }
   console.log("🖼️  Copied static assets");
 
   // ── 4. Build content + metadata artifacts ────────────────────────────────
@@ -353,6 +1065,7 @@ function build(docsDir: string, outDir: string) {
       }
       content = `---\ntitle: "${title}"\n---\n\n${content}`;
     }
+    content = rewriteImportsInContent(content, srcPath, destPath, docsDir, sourceMirrorDir);
     writeFileSync(destPath, content, "utf-8");
   }
 
@@ -375,20 +1088,60 @@ function build(docsDir: string, outDir: string) {
       writeFileSync(metaPath, JSON.stringify(meta.data, null, 2) + "\n", "utf-8");
     }
 
+    function sanitizeFrontmatterValue(value: string): string {
+      return value.replace(/\r?\n+/g, " ").replace(/"/g, '\\"').trim();
+    }
+
     // Copy pages using explicit source paths from docs.json/velu.json
-    for (const { src, dest } of artifacts.pageMap) {
-      // Check for .mdx first, then .md
-      let srcPath = join(docsDir, `${src}.mdx`);
-      let ext = '.mdx';
-      if (!existsSync(srcPath)) {
-        srcPath = join(docsDir, `${src}.md`);
-        ext = '.md';
-      }
-      if (!existsSync(srcPath)) {
-        console.warn(`⚠️  Missing page source: ${src}${ext} (language: ${langCode})`);
+    for (const mapping of artifacts.pageMap) {
+      const destPath = join(
+        contentDir,
+        storagePrefix ? `${storagePrefix}/${mapping.dest}.mdx` : `${mapping.dest}.mdx`,
+      );
+
+      if (mapping.kind === "openapi-operation") {
+        mkdirSync(dirname(destPath), { recursive: true });
+        const operationLabel = `${mapping.openapiMethod ?? "GET"} ${mapping.openapiEndpoint ?? "/"}`;
+        const normalizedSpec = normalizeOpenApiSpecForFrontmatter(mapping.openapiSpec);
+        const openapiValue = normalizedSpec
+          ? `${normalizedSpec} ${operationLabel}`
+          : operationLabel;
+        const title = sanitizeFrontmatterValue(mapping.title ?? operationLabel);
+        const description = typeof mapping.description === "string"
+          ? sanitizeFrontmatterValue(mapping.description)
+          : "";
+        const version = typeof mapping.version === "string"
+          ? sanitizeFrontmatterValue(mapping.version)
+          : "";
+        const openapi = openapiValue.replace(/"/g, '\\"');
+        const warning = normalizedSpec
+          ? ""
+          : "\n> Warning: No OpenAPI spec source was resolved for this operation. Set `openapi` on this tab/group/navigation or at the top level.\n";
+        const descriptionLine = description ? `\ndescription: "${description}"` : "";
+        const deprecatedLine = mapping.deprecated === true ? `\ndeprecated: true` : "";
+        const statusLine = mapping.deprecated === true ? `\nstatus: "deprecated"` : "";
+        const versionLine = version ? `\nversion: "${version}"` : "";
+        const content = typeof mapping.content === "string" ? `${mapping.content.trim()}\n` : "";
+        writeFileSync(
+          destPath,
+          `---\ntitle: "${title}"${descriptionLine}${deprecatedLine}${statusLine}${versionLine}\nopenapi: "${openapi}"\n---\n${warning}${content}`,
+          "utf-8",
+        );
         continue;
       }
-      const destPath = join(contentDir, storagePrefix ? `${storagePrefix}/${dest}.mdx` : `${dest}.mdx`);
+
+      const src = mapping.src;
+      // Check for .mdx first, then .md
+      let srcPath = join(docsDir, `${src}.mdx`);
+      let ext = ".mdx";
+      if (!existsSync(srcPath)) {
+        srcPath = join(docsDir, `${src}.md`);
+        ext = ".md";
+      }
+      if (!existsSync(srcPath)) {
+        console.warn(`Warning: Missing page source: ${src}${ext} (language: ${langCode})`);
+        continue;
+      }
       processPage(srcPath, destPath, src);
     }
 
@@ -413,7 +1166,7 @@ function build(docsDir: string, outDir: string) {
       const langEntry = navLanguages[i];
       const isDefault = i === 0;
       const langConfig = { ...config, navigation: { ...config.navigation, tabs: langEntry.tabs } } as VeluConfig;
-      const artifacts = buildArtifacts(langConfig);
+      const artifacts = buildArtifacts(langConfig, docsDir);
       writeLangContent(langEntry.language, artifacts, isDefault, true);
       totalPages += artifacts.pageMap.length;
       totalMeta += artifacts.metaFiles.length;
@@ -424,7 +1177,7 @@ function build(docsDir: string, outDir: string) {
     writeFileSync(rootMetaPath, JSON.stringify({ pages: rootPages }, null, 2) + "\n", "utf-8");
   } else {
     // ── Mode 2: Simple (single-lang or same-nav multi-lang) ───────────
-    const artifacts = buildArtifacts(config);
+    const artifacts = buildArtifacts(config, docsDir);
     const useLangFolders = simpleLanguages.length > 1;
     writeLangContent(simpleLanguages[0] || "en", artifacts, true, useLangFolders);
     totalPages += artifacts.pageMap.length;

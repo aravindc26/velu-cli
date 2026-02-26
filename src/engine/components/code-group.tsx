@@ -17,6 +17,8 @@ function readSharedSyncLabel(): string | null {
 
 function broadcastSyncLabel(label: string) {
   if (typeof window === 'undefined') return;
+  const existing = readSharedSyncLabel();
+  if (existing && normalizeSyncLabel(existing) === normalizeSyncLabel(label)) return;
   (window as any)[VELU_TAB_SYNC_KEY] = label;
   window.dispatchEvent(new CustomEvent(VELU_TAB_SYNC_EVENT, { detail: { label } }));
 }
@@ -97,6 +99,7 @@ function languageName(language: string | undefined): string | undefined {
     zsh: 'Zsh',
     yml: 'YAML',
     md: 'Markdown',
+    mdx: 'MDX',
   };
   return map[language] ?? language.charAt(0).toUpperCase() + language.slice(1);
 }
@@ -149,6 +152,8 @@ function languageAbbr(language: string | undefined): string {
     bash: 'SH',
     yaml: 'YM',
     markdown: 'MD',
+    md: 'MD',
+    mdx: 'MDX',
   };
   return map[language] ?? language.slice(0, 2).toUpperCase();
 }
@@ -176,17 +181,27 @@ function normalizeLanguage(language: string | undefined): string {
     py: 'python',
     sh: 'shell',
     yml: 'yaml',
+    md: 'markdown',
+    mdx: 'mdx',
   };
   return map[lower] ?? lower;
 }
 
 function LanguageIcon({ language, label, abbr }: { language: string; label: string; abbr: string }) {
+  if (language === 'text') {
+    return null;
+  }
+
+  if (language === 'markdown' || language === 'mdx' || language === 'md') {
+    return <span className={['velu-lang-icon', `velu-lang-${language}`].join(' ')}>{abbr}</span>;
+  }
+
   const src = LANGUAGE_ICON_URL[language];
   if (src) {
     return <img src={src} alt={`${label} icon`} className="velu-lang-icon-img" loading="lazy" decoding="async" />;
   }
 
-  return <span className={['velu-lang-icon', `velu-lang-${language}`].join(' ')}>{abbr}</span>;
+  return null;
 }
 
 function getCodeLabel(block: any, index: number): string {
@@ -261,7 +276,7 @@ export function VeluCodeGroup({ children, className, dropdown, items, labels: la
     const applyLabel = (label: string) => {
       const target = normalizeSyncLabel(label);
       const idx = syncLabels.findIndex((item) => normalizeSyncLabel(item) === target);
-      if (idx >= 0) setActiveIndex(idx);
+      if (idx >= 0) setActiveIndex((prev) => (prev === idx ? prev : idx));
     };
 
     const existing = readSharedSyncLabel();
@@ -293,7 +308,7 @@ export function VeluCodeGroup({ children, className, dropdown, items, labels: la
               aria-selected={clampedIndex === index}
               className={['velu-code-group-tab-btn', clampedIndex === index ? 'is-active' : ''].filter(Boolean).join(' ')}
               onClick={() => {
-                setActiveIndex(index);
+                setActiveIndex((prev) => (prev === index ? prev : index));
                 if (item.languageLabel) broadcastSyncLabel(item.languageLabel);
               }}
             >
@@ -345,7 +360,7 @@ export function VeluCodeGroup({ children, className, dropdown, items, labels: la
                     aria-selected={clampedIndex === index}
                     className={['velu-code-group-select-item', clampedIndex === index ? 'is-active' : ''].filter(Boolean).join(' ')}
                     onClick={() => {
-                      setActiveIndex(index);
+                      setActiveIndex((prev) => (prev === index ? prev : index));
                       if (item.languageLabel) broadcastSyncLabel(item.languageLabel);
                       setMenuOpen(false);
                     }}
