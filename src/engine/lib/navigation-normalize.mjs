@@ -240,7 +240,14 @@ function normalizeAnchorAsGroup(rawAnchor, usedGroupSlugs, inheritedOpenApi, inh
 }
 function collectEntries(rawSection, usedGroupSlugs, inheritedOpenApi, inheritedVersion) {
     const entries = [];
+    const hasNonMenuContent = (Array.isArray(rawSection.groups) && rawSection.groups.length > 0) ||
+        (Array.isArray(rawSection.pages) && rawSection.pages.length > 0) ||
+        (Array.isArray(rawSection.anchors) && rawSection.anchors.length > 0) ||
+        (Array.isArray(rawSection.dropdowns) && rawSection.dropdowns.length > 0) ||
+        (Array.isArray(rawSection.tabs) && rawSection.tabs.length > 0);
     for (const item of Array.isArray(rawSection.menu) ? rawSection.menu : []) {
+        if (hasNonMenuContent)
+            break;
         if (isMenuItem(item))
             entries.push(normalizeMenuItem(item, usedGroupSlugs, inheritedOpenApi, inheritedVersion));
     }

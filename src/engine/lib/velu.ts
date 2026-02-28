@@ -18,6 +18,11 @@ interface VeluTab {
   groups?: VeluGroup[];
 }
 
+interface VeluTabMenuItem {
+  item: string;
+  pages?: Array<string | VeluSeparator | VeluLink>;
+}
+
 interface VeluSeparator {
   separator: string;
 }
@@ -158,6 +163,7 @@ interface VeluConfig {
 }
 
 let cachedConfig: VeluConfig | null = null;
+let cachedRawConfig: Record<string, unknown> | null = null;
 
 function loadVeluConfig(): VeluConfig {
   if (cachedConfig) return cachedConfig;
@@ -167,8 +173,27 @@ function loadVeluConfig(): VeluConfig {
   return cachedConfig;
 }
 
+function loadRawConfig(): Record<string, unknown> {
+  if (cachedRawConfig) return cachedRawConfig;
+  const configPath = resolveConfigPath(process.cwd());
+  const raw = readFileSync(configPath, 'utf-8');
+  const parsed = JSON.parse(raw);
+  cachedRawConfig = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? parsed as Record<string, unknown>
+    : {};
+  return cachedRawConfig;
+}
+
 function isGroup(item: unknown): item is VeluGroup {
   return typeof item === 'object' && item !== null && 'group' in item;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isTabMenuItem(value: unknown): value is VeluTabMenuItem {
+  return isRecord(value) && typeof value.item === 'string';
 }
 
 function slugify(input: string, fallback: string): string {
@@ -260,6 +285,60 @@ export function getGlobalAnchors(): VeluAnchor[] {
   return (config.navigation.global?.anchors ?? []).filter(
     (a): a is VeluAnchor & { href: string } => typeof a.href === 'string' && a.href.length > 0 && !a.hidden
   );
+}
+
+export interface VeluTabMenuDefinition {
+  tab: string;
+  items: Array<{
+    item: string;
+    pages: string[];
+  }>;
+}
+
+function extractMenuItems(menuValue: unknown): VeluTabMenuDefinition['items'] {
+  if (!Array.isArray(menuValue)) return [];
+  const out: VeluTabMenuDefinition['items'] = [];
+  for (const entry of menuValue) {
+    if (!isTabMenuItem(entry)) continue;
+    const pages = Array.isArray(entry.pages)
+      ? entry.pages.filter((page): page is string => typeof page === 'string' && page.trim().length > 0)
+      : [];
+    out.push({ item: entry.item, pages });
+  }
+  return out;
+}
+
+function collectTabMenus(section: unknown, out: VeluTabMenuDefinition[]): void {
+  if (!isRecord(section)) return;
+
+  const tabs = Array.isArray(section.tabs) ? section.tabs : [];
+  for (const tabCandidate of tabs) {
+    if (!isRecord(tabCandidate)) continue;
+    if (typeof tabCandidate.tab === 'string') {
+      const items = extractMenuItems(tabCandidate.menu);
+      if (items.length > 0) out.push({ tab: tabCandidate.tab, items });
+    }
+    collectTabMenus(tabCandidate, out);
+  }
+
+  const nestedKeys: Array<'dropdowns' | 'products' | 'versions' | 'anchors'> = [
+    'dropdowns',
+    'products',
+    'versions',
+    'anchors',
+  ];
+  for (const key of nestedKeys) {
+    const list = Array.isArray(section[key]) ? section[key] : [];
+    for (const entry of list) collectTabMenus(entry, out);
+  }
+}
+
+export function getTabMenuDefinitions(): VeluTabMenuDefinition[] {
+  const raw = loadRawConfig();
+  const navigation = isRecord(raw.navigation) ? raw.navigation : {};
+  const out: VeluTabMenuDefinition[] = [];
+  collectTabMenus(navigation, out);
+  return out;
 }
 
 export function getLanguages(): string[] {

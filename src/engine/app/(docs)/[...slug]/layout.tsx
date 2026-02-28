@@ -1,8 +1,17 @@
 import { isValidElement, type ReactNode } from 'react';
 import { DocsLayout } from 'fumadocs-ui/layouts/notebook';
+import type { LinkItemType } from 'fumadocs-ui/layouts/shared';
 import { baseOptions } from '@/lib/layout.shared';
 import { source } from '@/lib/source';
-import { getIconLibrary, getLanguages, getVersionOptions, getProductOptions, type VeluVersionOption, type VeluProductOption } from '@/lib/velu';
+import {
+  getIconLibrary,
+  getLanguages,
+  getVersionOptions,
+  getProductOptions,
+  getTabMenuDefinitions,
+  type VeluVersionOption,
+  type VeluProductOption,
+} from '@/lib/velu';
 import { SidebarLinks } from '@/components/sidebar-links';
 import { ProductSwitcher } from '@/components/product-switcher';
 import { VeluIcon } from '@/components/icon';
@@ -186,6 +195,59 @@ function resolveTabContext(slugInput: string[] | undefined): { containerSlug?: s
   return { tabSlug: contentSlug[0] };
 }
 
+function normalizePath(value: string): string {
+  return value.replace(/^\/+|\/+$/g, '').toLowerCase();
+}
+
+function basename(value: string): string {
+  const normalized = normalizePath(value);
+  const parts = normalized.split('/').filter(Boolean);
+  return parts[parts.length - 1] ?? normalized;
+}
+
+function resolveMenuTargetUrl(menuPages: string[], tabUrls: Set<string>): string | undefined {
+  const urls = Array.from(tabUrls);
+  if (urls.length === 0) return undefined;
+
+  for (const page of menuPages) {
+    const normalizedPage = normalizePath(page);
+    if (!normalizedPage) continue;
+
+    const direct = urls.find((url) => {
+      const normalizedUrl = normalizePath(url);
+      return normalizedUrl === normalizedPage || normalizedUrl.endsWith(`/${normalizedPage}`);
+    });
+    if (direct) return direct;
+
+    const pageBase = basename(normalizedPage);
+    const basenameMatches = urls.filter((url) => basename(url) === pageBase);
+    if (basenameMatches.length === 1) return basenameMatches[0];
+  }
+
+  return undefined;
+}
+
+function resolveMenuLinksForTab(
+  tabUrls: Set<string>,
+  candidates: ReturnType<typeof getTabMenuDefinitions>,
+): Array<{ text: string; url: string }> {
+  let best: Array<{ text: string; url: string }> = [];
+
+  for (const candidate of candidates) {
+    const resolved = candidate.items
+      .map((item) => {
+        const target = resolveMenuTargetUrl(item.pages, tabUrls);
+        if (!target) return null;
+        return { text: item.item, url: target };
+      })
+      .filter((entry): entry is { text: string; url: string } => entry !== null);
+
+    if (resolved.length > best.length) best = resolved;
+  }
+
+  return best;
+}
+
 function scopeTreeToTab<T extends { children?: unknown[] }>(
   tree: T,
   tabSlug?: string,
@@ -246,15 +308,42 @@ export default async function SlugLayout({ children, params }: SlugLayoutProps) 
   const containerScopedTree = filterTreeBySlugPrefix(source.getPageTree(locale), activePrefix);
   const rawTree = scopeTreeToTab(containerScopedTree, currentTabSlug, containerSlug);
   const navbarTabs = buildNavbarTabs(source.getPageTree(locale)) ?? [];
+  const tabMenuDefinitions = getTabMenuDefinitions();
   const tree = renderIconsInTree(rawTree, iconLibrary);
   const base = baseOptions();
-  const headerTabLinks = navbarTabs
-    .map((tab) => ({
-      text: typeof tab.title === 'string' ? tab.title : '',
-      url: tab.url,
-      secondary: false,
-    }))
-    .filter((link) => link.text.length > 0);
+  const headerTabLinks: LinkItemType[] = navbarTabs
+    .map((tab): LinkItemType | null => {
+      const tabText = typeof tab.title === 'string' ? tab.title : '';
+      if (tabText.length === 0) return null;
+
+      const menuCandidates = tabMenuDefinitions.filter(
+        (definition) => definition.tab.trim().toLowerCase() === tabText.trim().toLowerCase(),
+      );
+      const menuLinks = resolveMenuLinksForTab(tab.urls, menuCandidates);
+
+      if (menuLinks.length > 0) {
+        return {
+          type: 'menu',
+          text: tabText,
+          url: tab.url,
+          active: 'nested-url',
+          secondary: false,
+          items: menuLinks.map((item) => ({
+            text: item.text,
+            url: item.url,
+            active: 'nested-url',
+          })),
+        };
+      }
+
+      return {
+        text: tabText,
+        url: tab.url,
+        active: 'nested-url',
+        secondary: false,
+      };
+    })
+    .filter((link): link is LinkItemType => link !== null);
 
   return (
     <DocsLayout

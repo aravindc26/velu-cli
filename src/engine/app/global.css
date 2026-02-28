@@ -60,7 +60,8 @@ nextjs-portal {
     align-self: stretch;
   }
 
-  #nd-subnav [data-header-body] > div.flex.flex-1.items-center.justify-end.md\:gap-2 > div.flex.items-center.gap-6.empty\:hidden.max-lg\:hidden > a {
+  #nd-subnav [data-header-body] > div.flex.flex-1.items-center.justify-end.md\:gap-2 > div.flex.items-center.gap-6.empty\:hidden.max-lg\:hidden > a,
+  #nd-subnav [data-header-body] > div.flex.flex-1.items-center.justify-end.md\:gap-2 > div.flex.items-center.gap-6.empty\:hidden.max-lg\:hidden > button {
     display: inline-flex;
     align-items: center;
     height: 100%;
@@ -70,7 +71,15 @@ nextjs-portal {
     margin-bottom: -1px;
   }
 
-  #nd-subnav [data-header-body] > div.flex.flex-1.items-center.justify-end.md\:gap-2 > div.flex.items-center.gap-6.empty\:hidden.max-lg\:hidden > a[data-active='true'] {
+  #nd-subnav [data-header-body] > div.flex.flex-1.items-center.justify-end.md\:gap-2 > div.flex.items-center.gap-6.empty\:hidden.max-lg\:hidden > button {
+    background: transparent;
+    padding-inline: 0;
+    border-radius: 0;
+  }
+
+  #nd-subnav [data-header-body] > div.flex.flex-1.items-center.justify-end.md\:gap-2 > div.flex.items-center.gap-6.empty\:hidden.max-lg\:hidden > a[data-active='true'],
+  #nd-subnav [data-header-body] > div.flex.flex-1.items-center.justify-end.md\:gap-2 > div.flex.items-center.gap-6.empty\:hidden.max-lg\:hidden > button:has(a[data-active='true']),
+  #nd-subnav [data-header-body] > div.flex.flex-1.items-center.justify-end.md\:gap-2 > div.flex.items-center.gap-6.empty\:hidden.max-lg\:hidden > button[data-state='open'] {
     border-bottom-color: var(--color-fd-primary);
   }
 }
