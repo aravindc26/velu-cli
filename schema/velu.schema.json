@@ -36,6 +36,22 @@
       ],
       "default": "neutral"
     },
+    "name": {
+      "type": "string",
+      "description": "Site name shown in metadata and brand text."
+    },
+    "title": {
+      "type": "string",
+      "description": "Legacy alias for site name. Used when `name` is not provided."
+    },
+    "favicon": {
+      "$ref": "#/definitions/themeAsset",
+      "description": "Favicon path or light/dark favicon object."
+    },
+    "logo": {
+      "$ref": "#/definitions/logoAsset",
+      "description": "Brand logo path or light/dark logo object."
+    },
     "colors": {
       "type": "object",
       "description": "Override the theme's accent colors.",
@@ -422,6 +438,58 @@
   },
   "additionalProperties": false,
   "definitions": {
+    "themeAsset": {
+      "description": "Theme-aware asset path. Supports a string or an object with light/dark variants.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "light": {
+              "type": "string"
+            },
+            "dark": {
+              "type": "string"
+            },
+            "default": {
+              "type": "string",
+              "description": "Fallback used when a mode-specific value is not provided."
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "logoAsset": {
+      "description": "Logo asset config. Same as themeAsset, with optional logo link target.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "light": {
+              "type": "string"
+            },
+            "dark": {
+              "type": "string"
+            },
+            "default": {
+              "type": "string",
+              "description": "Fallback used when a mode-specific value is not provided."
+            },
+            "href": {
+              "$ref": "#/definitions/href",
+              "description": "Optional link target when clicking the logo."
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "seoConfig": {
       "type": "object",
       "description": "SEO settings including global metatags and indexing policy.",

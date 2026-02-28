@@ -1,12 +1,39 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
 import { createElement } from 'react';
 import { VersionSwitcher } from '@/components/version-switcher';
-import { getExternalTabs, getNavbarAnchors, getVersionOptions } from '@/lib/velu';
+import { getExternalTabs, getNavbarAnchors, getSiteLogoAsset, getSiteName, getVersionOptions } from '@/lib/velu';
 
 export function baseOptions(): BaseLayoutProps {
   const externalTabs = getExternalTabs();
   const navAnchors = getNavbarAnchors();
   const versions = getVersionOptions();
+  const siteName = getSiteName();
+  const logo = getSiteLogoAsset();
+  const lightLogo = logo.light ?? logo.dark;
+  const darkLogo = logo.dark ?? logo.light;
+  const logoHref = typeof logo.href === 'string' && logo.href.trim().length > 0 ? logo.href.trim() : '/';
+
+  const navTitle =
+    lightLogo || darkLogo
+      ? createElement(
+          'span',
+          { className: 'velu-nav-brand' },
+          lightLogo
+            ? createElement('img', {
+                src: lightLogo,
+                alt: siteName,
+                className: 'velu-nav-logo velu-nav-logo-light',
+              })
+            : null,
+          darkLogo
+            ? createElement('img', {
+                src: darkLogo,
+                alt: siteName,
+                className: 'velu-nav-logo velu-nav-logo-dark',
+              })
+            : null,
+        )
+      : siteName;
 
   const links = [
     ...externalTabs.map((tab: { label: string; href: string }) => ({
@@ -25,7 +52,8 @@ export function baseOptions(): BaseLayoutProps {
 
   return {
     nav: {
-      title: 'Velu Docs',
+      title: navTitle,
+      url: logoHref,
       children:
         versions.length > 1
           ? createElement(

@@ -110,6 +110,7 @@ interface VeluSeoConfig {
 interface VeluThemeAsset {
   light?: string;
   dark?: string;
+  href?: string;
 }
 
 export interface VeluProductOption {
@@ -563,11 +564,13 @@ function normalizeThemeAsset(value: unknown): VeluThemeAsset {
   const light = normalizeAssetPath(record.light);
   const dark = normalizeAssetPath(record.dark);
   const any = normalizeAssetPath(record.default);
+  const href = normalizeAssetPath(record.href);
   return {
     ...(light ? { light } : {}),
     ...(dark ? { dark } : {}),
     ...(!light && any ? { light: any } : {}),
     ...(!dark && any ? { dark: any } : {}),
+    ...(href ? { href } : {}),
   };
 }
 

@@ -7,6 +7,50 @@ body {
   min-height: 100vh;
 }
 
+.velu-nav-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+}
+
+.velu-nav-logo {
+  display: block;
+  height: 1.95rem;
+  width: auto;
+  max-width: 190px;
+}
+
+.velu-nav-logo-dark {
+  display: none;
+}
+
+.dark .velu-nav-logo-light {
+  display: none;
+}
+
+.dark .velu-nav-logo-dark {
+  display: block;
+}
+
+/* Keep sidebar brand and collapse control aligned like Mintlify. */
+#nd-sidebar .flex.justify-between {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.5rem;
+}
+
+#nd-sidebar .flex.justify-between > a {
+  min-width: 0;
+  overflow: hidden;
+}
+
+#nd-sidebar .flex.justify-between > button {
+  margin-left: auto;
+}
+
 /* Ensure sidebar/toc widths are set on the grid layout */
 nextjs-portal {
   display: none !important;
