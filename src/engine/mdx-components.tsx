@@ -150,40 +150,47 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
       className,
       children,
       ...props
-    }: any) => (
-      <Card
-        {...props}
-        icon={typeof icon === 'string'
-          ? (
-            <VeluIcon
-              name={icon}
-              library={iconLibrary}
-              iconType={iconType}
-              color={typeof color === 'string' && color.startsWith('#') ? color : undefined}
-            />
-          )
-          : icon}
-        className={[
-          'velu-card',
-          className,
-          horizontal ? 'velu-card-horizontal' : '',
-          (color && !(typeof color === 'string' && color.startsWith('#')))
-            ? `velu-card-color-${String(color)}`
-            : '',
-        ].filter(Boolean).join(' ')}
-      >
-        {(img || image) ? (
-          <img src={img ?? image} alt="" className="velu-card-image" />
-        ) : null}
-        {children}
-        {(cta || arrow) ? (
-          <div className="velu-card-cta">
-            {cta ? <span>{cta}</span> : null}
-            {arrow ? <VeluIcon name="arrow-right" library={iconLibrary} className="velu-card-cta-arrow" /> : null}
-          </div>
-        ) : null}
-      </Card>
-    ),
+    }: any) => {
+      const hasImage = Boolean(img || image);
+      const hasIcon = Boolean(icon);
+      // Mintlify-like default: icon cards are horizontal unless explicitly disabled.
+      const useHorizontal = typeof horizontal === 'boolean' ? horizontal : (hasIcon && !hasImage);
+
+      return (
+        <Card
+          {...props}
+          icon={typeof icon === 'string'
+            ? (
+              <VeluIcon
+                name={icon}
+                library={iconLibrary}
+                iconType={iconType}
+                color={typeof color === 'string' && color.startsWith('#') ? color : undefined}
+              />
+            )
+            : icon}
+          className={[
+            'velu-card',
+            className,
+            useHorizontal ? 'velu-card-horizontal' : '',
+            (color && !(typeof color === 'string' && color.startsWith('#')))
+              ? `velu-card-color-${String(color)}`
+              : '',
+          ].filter(Boolean).join(' ')}
+        >
+          {hasImage ? (
+            <img src={img ?? image} alt="" className="velu-card-image" />
+          ) : null}
+          {children}
+          {(cta || arrow) ? (
+            <div className="velu-card-cta">
+              {cta ? <span>{cta}</span> : null}
+              {arrow ? <VeluIcon name="arrow-right" library={iconLibrary} className="velu-card-cta-arrow" /> : null}
+            </div>
+          ) : null}
+        </Card>
+      );
+    },
     Accordions: FumaAccordions as any,
     Accordion: FumaAccordion as any,
     CodeGroup: VeluCodeGroup as any,

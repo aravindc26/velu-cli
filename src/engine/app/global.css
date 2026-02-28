@@ -599,15 +599,18 @@ nextjs-portal {
 }
 
 [data-card].velu-card-horizontal {
-  display: grid;
-  grid-template-columns: auto 1fr;
+  display: grid !important;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
   column-gap: 0.75rem;
-  align-items: start;
+  align-items: start !important;
 }
 
-[data-card].velu-card-horizontal > div:first-child {
+[data-card].velu-card-horizontal > div.not-prose {
   grid-row: 1 / span 3;
   margin-bottom: 0;
+  margin-top: 0.02rem;
+  align-self: start;
+  justify-self: start;
 }
 
 [data-card].velu-card-horizontal > h3 {
@@ -635,6 +638,47 @@ nextjs-portal {
   display: flex;
   flex-direction: column;
   height: 100%;
+  border: 1px solid var(--color-fd-border);
+  background: color-mix(in oklab, var(--color-fd-background) 92%, var(--color-fd-card));
+}
+
+[data-card].velu-card,
+.velu-card-group > [data-card] {
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+[data-card].velu-card:hover,
+.velu-card-group > [data-card]:hover {
+  /* Keep card surface stable on hover and emphasize border instead. */
+  background: color-mix(in oklab, var(--color-fd-background) 92%, var(--color-fd-card)) !important;
+  border-color: color-mix(in oklab, var(--color-fd-primary) 72%, var(--color-fd-border));
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-fd-primary) 28%, transparent);
+}
+
+/* Mintlify-like icon chip styling inside cards. */
+[data-card].velu-card > div.not-prose {
+  background: transparent !important;
+  border: 0 !important;
+  color: var(--color-fd-primary) !important;
+  box-shadow: none !important;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0 !important;
+  border-radius: 0.7rem !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.55rem;
+}
+
+[data-card].velu-card > div.not-prose svg,
+[data-card].velu-card > div.not-prose img {
+  width: 1.6rem;
+  height: 1.6rem;
+}
+
+[data-card].velu-card > h3 {
+  margin-top: 0.04rem;
 }
 
 [data-card].velu-card + [data-card].velu-card {
