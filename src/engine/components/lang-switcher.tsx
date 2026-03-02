@@ -30,6 +30,12 @@ function nativeLabel(code: string): string {
   return code.toUpperCase();
 }
 
+function withTrailingSlashPath(path: string): string {
+  if (!path.startsWith('/')) return path;
+  if (path === '/' || path.endsWith('/')) return path;
+  return `${path}/`;
+}
+
 export function LanguageSwitcher({ languages, defaultLang }: { languages: string[]; defaultLang: string }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -63,7 +69,7 @@ export function LanguageSwitcher({ languages, defaultLang }: { languages: string
     const newPath = code === defaultLang
       ? '/' + rest.join('/')
       : '/' + code + '/' + rest.join('/');
-    window.location.href = newPath;
+    window.location.href = withTrailingSlashPath(newPath);
   }
 
   return (

@@ -215,6 +215,13 @@ function normalizeDocPath(value: string): string {
   return collapsed;
 }
 
+function withTrailingSlashPath(path: string): string {
+  if (!path.startsWith('/')) return path;
+  if (path === '/' || path.endsWith('/')) return path;
+  if (/\.[a-zA-Z0-9]+$/.test(path)) return path;
+  return `${path}/`;
+}
+
 function toAbsoluteMetaUrl(origin: string, value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return trimmed;
@@ -614,7 +621,7 @@ export default async function Page({ params }: PageProps) {
   const pageUrl = (typeof sourcePageUrl === 'string' && sourcePageUrl.trim())
     ? sourcePageUrl
     : (fallbackPath === '' ? '/' : fallbackPath);
-  const rssHref = `${pageUrl.replace(/\/$/, '') || ''}/rss.xml`;
+  const rssHref = `${withTrailingSlashPath(pageUrl).replace(/\/$/, '') || ''}/rss.xml`;
   const shouldReplaceTocWithApiExample = !hasExplicitApiRendering && Boolean(inlineApiDoc) && playgroundDisplay === 'interactive';
   const shouldShowOpenApiExampleInToc = !hasExplicitApiRendering && !parsedApiFrontmatter && Boolean(parsedOpenApiFrontmatter);
   const hasApiTocRail = shouldReplaceTocWithApiExample || shouldShowOpenApiExampleInToc;
@@ -741,7 +748,7 @@ export default async function Page({ params }: PageProps) {
           {(previousPage || nextPage) ? (
             <div className={['velu-page-nav-grid', previousPage && nextPage ? 'velu-page-nav-grid-two' : 'velu-page-nav-grid-one'].join(' ')}>
               {previousPage ? (
-                <a href={previousPage.url} className="velu-page-nav-card">
+                <a href={withTrailingSlashPath(previousPage.url)} className="velu-page-nav-card">
                   <p className="velu-page-nav-title">{previousPage.data.title}</p>
                   <p className="velu-page-nav-meta">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
@@ -750,7 +757,7 @@ export default async function Page({ params }: PageProps) {
                 </a>
               ) : null}
               {nextPage ? (
-                <a href={nextPage.url} className="velu-page-nav-card velu-page-nav-card-next">
+                <a href={withTrailingSlashPath(nextPage.url)} className="velu-page-nav-card velu-page-nav-card-next">
                   <p className="velu-page-nav-title">{nextPage.data.title}</p>
                   <p className="velu-page-nav-meta velu-page-nav-meta-next">
                     <span>{nextPage.data.description ?? 'Next'}</span>

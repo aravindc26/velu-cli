@@ -9,6 +9,10 @@ const withMDX = createMDX({
 const config = {
   reactStrictMode: false,
   output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
+  // For static hosts without rewrite rules, emit directory routes
+  // (e.g. /docs/page/index.html) so extensionless URLs resolve.
+  trailingSlash: true,
+  skipTrailingSlashRedirect: true,
   distDir: 'dist',
   devIndicators: false,
   turbopack: {

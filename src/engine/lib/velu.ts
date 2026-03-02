@@ -211,6 +211,12 @@ function pageBasename(page: string): string {
   return parts[parts.length - 1] ?? page;
 }
 
+function withTrailingSlashPath(path: string): string {
+  if (!path.startsWith('/')) return path;
+  if (path === '/' || path.endsWith('/')) return path;
+  return `${path}/`;
+}
+
 function findFirstPageInGroup(group: VeluGroup): string | undefined {
   for (const item of group.pages) {
     if (typeof item === 'string') return item;
@@ -382,7 +388,7 @@ export function getProductOptions(): VeluProductOption[] {
       icon: product.icon,
       iconType: product.iconType,
       tabSlugs,
-      defaultPath,
+      defaultPath: withTrailingSlashPath(defaultPath),
     };
   });
 }
@@ -417,7 +423,7 @@ export function getVersionOptions(): VeluVersionOption[] {
       explicitDefault: version.default === true,
       versionParts: parseVersionParts(version.version),
       tabSlugs,
-      defaultPath,
+      defaultPath: withTrailingSlashPath(defaultPath),
       order: index,
     };
   });

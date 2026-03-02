@@ -5,6 +5,14 @@ import { ThumbsDown, ThumbsUp } from 'lucide-react';
 
 type Vote = 'yes' | 'no';
 
+const YES_OPTIONS = [
+  'The guide worked as expected',
+  'It was easy to find the information I needed',
+  'It was easy to understand the product and features',
+  'The documentation is up to date',
+  'Something else',
+];
+
 const NO_OPTIONS = [
   'Help me get started faster',
   'Make it easier to find what I\'m looking for',
@@ -19,7 +27,8 @@ export function PageFeedback() {
   const [details, setDetails] = useState('');
   const [email, setEmail] = useState('');
 
-  const showForm = vote === 'no';
+  const showForm = vote !== null;
+  const options = vote === 'yes' ? YES_OPTIONS : NO_OPTIONS;
   const showOptionalInputs = selectedReason === 'Something else';
 
   const onChooseVote = (value: Vote) => {
@@ -81,10 +90,12 @@ export function PageFeedback() {
 
       {showForm ? (
         <div className="velu-page-feedback-panel">
-          <h3 className="velu-page-feedback-panel-title">How can we improve our product?</h3>
+          <h3 className="velu-page-feedback-panel-title">
+            {vote === 'yes' ? 'Great! What worked best for you?' : 'How can we improve our product?'}
+          </h3>
 
           <div className="velu-page-feedback-options" role="radiogroup" aria-label="Feedback reasons">
-            {NO_OPTIONS.map((option) => {
+            {options.map((option) => {
               const checked = selectedReason === option;
               return (
                 <button

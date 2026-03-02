@@ -1,5 +1,5 @@
 import { resolve, join, dirname, delimiter } from "node:path";
-import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, cpSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, cpSync, rmSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -261,11 +261,103 @@ function exportMarkdownRoutes(outDir: string) {
   console.log(`📝 Exported ${copied} markdown files to static route paths`);
 }
 
+function collectStaticRoutePaths(distDir: string): string[] {
+  const routes = new Set<string>();
+
+  function walk(relDir: string) {
+    const absDir = join(distDir, relDir);
+    const entries = readdirSync(absDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const childRel = relDir ? join(relDir, entry.name) : entry.name;
+      if (existsSync(join(distDir, childRel, "index.html"))) {
+        const normalized = childRel.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+        if (
+          normalized.length > 0 &&
+          !normalized.startsWith("_next") &&
+          !normalized.startsWith("_not-found") &&
+          normalized !== "404" &&
+          !normalized.startsWith("pagefind")
+        ) {
+          routes.add(`/${normalized}`);
+        }
+      }
+      walk(childRel);
+    }
+  }
+
+  walk("");
+  return Array.from(routes).sort((a, b) => a.localeCompare(b));
+}
+
+function addStaticRouteCompatibility(outDir: string) {
+  const distDir = join(outDir, "dist");
+  if (!existsSync(distDir)) return;
+
+  const routes = collectStaticRoutePaths(distDir);
+  if (routes.length === 0) return;
+
+  let aliasCount = 0;
+  for (const route of routes) {
+    const rel = route.replace(/^\/+/, "");
+    const src = join(distDir, rel, "index.html");
+    const htmlAlias = join(distDir, `${rel}.html`);
+    if (existsSync(src) && !existsSync(htmlAlias)) {
+      copyFileSync(src, htmlAlias);
+      aliasCount += 1;
+    }
+  }
+
+  const fallbackPath = join(distDir, "404.html");
+  if (existsSync(fallbackPath)) {
+    const html = readFileSync(fallbackPath, "utf-8");
+    if (!html.includes("velu-noslash-fallback")) {
+      const script = [
+        '<script id="velu-noslash-fallback">',
+        "(function(){",
+        "  try {",
+        `    var routes = new Set(${JSON.stringify(routes)});`,
+        "    var path = (window.location && window.location.pathname ? window.location.pathname : '/').replace(/\\/+$/, '');",
+        "    if (!path || path === '/') return;",
+        "    if (/\\.[a-zA-Z0-9]+$/.test(path)) return;",
+        "    if (!routes.has(path)) return;",
+        "    var search = window.location.search || '';",
+        "    var hash = window.location.hash || '';",
+        "    window.location.replace(path + '/' + search + hash);",
+        "  } catch (_) {}",
+        "})();",
+        "</script>",
+      ].join("");
+      const patched = html.includes("</body>") ? html.replace("</body>", `${script}</body>`) : `${html}\n${script}\n`;
+      writeFileSync(fallbackPath, patched, "utf-8");
+    }
+  }
+
+  const redirectsPath = join(distDir, "_redirects");
+  const existingRedirects = existsSync(redirectsPath) ? readFileSync(redirectsPath, "utf-8") : "";
+  const existingLines = new Set(existingRedirects.split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
+  const redirectLines = routes.map((route) => `${route}  ${route}/  301`);
+  let redirectAdded = 0;
+  for (const line of redirectLines) {
+    if (existingLines.has(line)) continue;
+    existingLines.add(line);
+    redirectAdded += 1;
+  }
+  if (redirectAdded > 0) {
+    const merged = Array.from(existingLines).join("\n") + "\n";
+    writeFileSync(redirectsPath, merged, "utf-8");
+  }
+
+  console.log(`🔁 Added static compatibility for ${routes.length} routes (${aliasCount} .html aliases, ${redirectAdded} redirects)`);
+}
+
 async function buildSite(docsDir: string) {
   const docsOutDir = await generateProject(docsDir);
   const runtimeOutDir = prepareRuntimeOutDir(docsOutDir);
   await buildStatic(runtimeOutDir, docsDir);
   exportMarkdownRoutes(runtimeOutDir);
+  addStaticRouteCompatibility(runtimeOutDir);
 
   if (!samePath(docsOutDir, runtimeOutDir)) {
     const docsDistDir = join(docsOutDir, "dist");

@@ -41,6 +41,26 @@ interface PageTreeFolderNode {
   children?: unknown[];
 }
 
+function withTrailingSlashUrl(url: string): string {
+  const trimmed = url.trim();
+  if (trimmed.length === 0) return trimmed;
+  if (/^(https?:|mailto:|tel:|#)/i.test(trimmed)) return trimmed;
+
+  const hashIndex = trimmed.indexOf('#');
+  const queryIndex = trimmed.indexOf('?');
+  const endIndex = [hashIndex, queryIndex].filter((index) => index >= 0).sort((a, b) => a - b)[0] ?? trimmed.length;
+  const path = trimmed.slice(0, endIndex);
+  const suffix = trimmed.slice(endIndex);
+
+  if (!path.startsWith('/')) return trimmed;
+  if (path === '/' || path.endsWith('/')) return `${path}${suffix}`;
+
+  const lastSegment = path.split('/').filter(Boolean).pop() ?? '';
+  if (lastSegment.includes('.')) return trimmed;
+
+  return `${path}/${suffix}`;
+}
+
 function resolveLocale(slugInput: string[] | undefined): string {
   const languages = getLanguages();
   const defaultLanguage = languages[0] ?? 'en';
@@ -120,6 +140,10 @@ function renderIconsInTree<T>(node: T, iconLibrary: 'fontawesome' | 'lucide' | '
         ? nodeWithIconType.iconType
         : undefined;
       out[key] = <VeluIcon name={value} iconType={iconType} library={iconLibrary} fallback={false} />;
+      continue;
+    }
+    if (key === 'url' && typeof value === 'string') {
+      out[key] = withTrailingSlashUrl(value);
       continue;
     }
     out[key] = renderIconsInTree(value, iconLibrary);
@@ -347,12 +371,12 @@ export default async function SlugLayout({ children, params }: SlugLayoutProps) 
         return {
           type: 'menu',
           text: tabText,
-          url: tab.url,
+          url: withTrailingSlashUrl(tab.url),
           active: 'nested-url',
           secondary: false,
           items: menuLinks.map((item) => ({
             text: item.text,
-            url: item.url,
+            url: withTrailingSlashUrl(item.url),
             active: 'nested-url',
           })),
         };
@@ -360,7 +384,7 @@ export default async function SlugLayout({ children, params }: SlugLayoutProps) 
 
       return {
         text: tabText,
-        url: tab.url,
+        url: withTrailingSlashUrl(tab.url),
         active: 'nested-url',
         secondary: false,
       };

@@ -14,6 +14,12 @@ function ChevronDownIcon() {
   );
 }
 
+function withTrailingSlashPath(path: string): string {
+  if (!path.startsWith('/')) return path;
+  if (path === '/' || path.endsWith('/')) return path;
+  return `${path}/`;
+}
+
 export function ProductSwitcher({
   products,
   iconLibrary,
@@ -50,12 +56,12 @@ export function ProductSwitcher({
       // Replace the product segment, keep tab/group/page segments
       const rest = segments.slice(1);
       if (rest.length > 0) {
-        window.location.href = '/' + [target.slug, ...rest].join('/');
+        window.location.href = withTrailingSlashPath('/' + [target.slug, ...rest].join('/'));
         return;
       }
     }
 
-    window.location.href = target.defaultPath;
+    window.location.href = withTrailingSlashPath(target.defaultPath);
   }
 
   return (

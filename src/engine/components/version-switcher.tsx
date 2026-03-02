@@ -22,6 +22,12 @@ function ChevronDownIcon() {
   );
 }
 
+function withTrailingSlashPath(path: string): string {
+  if (!path.startsWith('/')) return path;
+  if (path === '/' || path.endsWith('/')) return path;
+  return `${path}/`;
+}
+
 export function VersionSwitcher({ versions }: { versions: VeluVersionOption[] }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -55,12 +61,12 @@ export function VersionSwitcher({ versions }: { versions: VeluVersionOption[] })
       const targetTab = target.tabSlugs[index] ?? target.tabSlugs[0];
       if (targetTab) {
         const rest = segments.slice(1);
-        window.location.href = '/' + [targetTab, ...rest].join('/');
+        window.location.href = withTrailingSlashPath('/' + [targetTab, ...rest].join('/'));
         return;
       }
     }
 
-    window.location.href = target.defaultPath;
+    window.location.href = withTrailingSlashPath(target.defaultPath);
   }
 
   return (

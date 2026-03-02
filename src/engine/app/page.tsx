@@ -37,7 +37,10 @@ function resolveDefaultDocsHref(): string {
   const defaultLanguage = getLanguages()[0] ?? 'en';
   const tree = source.getPageTree(defaultLanguage);
   const first = findFirstPageUrl(tree);
-  return first || '/';
+  if (!first || first === '/') return '/';
+  if (!first.startsWith('/')) return first;
+  if (first.endsWith('/')) return first;
+  return `${first}/`;
 }
 
 export default function HomePage() {
