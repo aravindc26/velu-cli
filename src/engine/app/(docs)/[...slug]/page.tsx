@@ -20,6 +20,7 @@ import { ChangelogFilters } from '@/components/changelog-filters';
 import { VeluImageZoomFallback } from '@/components/image-zoom-fallback';
 import { OpenApiTocSync } from '@/components/openapi-toc-sync';
 import { TocExamples } from '@/components/toc-examples';
+import { PageFeedback } from '@/components/page-feedback';
 import { parseChangelogFromMarkdown, parseFrontmatterBoolean } from '@/lib/changelog';
 
 interface RouteParams {
@@ -617,6 +618,13 @@ export default async function Page({ params }: PageProps) {
   ) : undefined;
   const toc = hasChangelog ? parsedChangelog.toc : page.data.toc;
   const tableOfContentHeader = apiTocHeader ?? (hasPanelExamples ? <div className="velu-toc-panel-rail" /> : undefined);
+  const orderedPages = hasI18n ? source.getPages(locale) : source.getPages();
+  const currentPageUrl = (typeof sourcePageUrl === 'string' && sourcePageUrl.trim())
+    ? sourcePageUrl
+    : pageUrl;
+  const currentIndex = orderedPages.findIndex((entry) => entry.url === currentPageUrl);
+  const previousPage = currentIndex > 0 ? orderedPages[currentIndex - 1] : undefined;
+  const nextPage = currentIndex >= 0 && currentIndex < orderedPages.length - 1 ? orderedPages[currentIndex + 1] : undefined;
 
   // Build pagefind filter attributes
   const metaAttrs: string[] = [`title:${page.data.title}`];
@@ -639,6 +647,7 @@ export default async function Page({ params }: PageProps) {
       toc={toc}
       full={hasChangelog ? false : (hasApiTocRail ? false : page.data.full)}
       tableOfContent={tableOfContentHeader ? { header: tableOfContentHeader } : undefined}
+      footer={{ enabled: false }}
     >
       <div
         data-pagefind-body
@@ -718,6 +727,31 @@ export default async function Page({ params }: PageProps) {
             })}
           />
         </DocsBody>
+        <section className="velu-page-feedback-wrap" aria-label="Page feedback">
+          <PageFeedback />
+          {(previousPage || nextPage) ? (
+            <div className={['velu-page-nav-grid', previousPage && nextPage ? 'velu-page-nav-grid-two' : 'velu-page-nav-grid-one'].join(' ')}>
+              {previousPage ? (
+                <a href={previousPage.url} className="velu-page-nav-card">
+                  <p className="velu-page-nav-title">{previousPage.data.title}</p>
+                  <p className="velu-page-nav-meta">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+                    <span>{previousPage.data.description ?? 'Previous'}</span>
+                  </p>
+                </a>
+              ) : null}
+              {nextPage ? (
+                <a href={nextPage.url} className="velu-page-nav-card velu-page-nav-card-next">
+                  <p className="velu-page-nav-title">{nextPage.data.title}</p>
+                  <p className="velu-page-nav-meta velu-page-nav-meta-next">
+                    <span>{nextPage.data.description ?? 'Next'}</span>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
+                  </p>
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
       </div>
       <footer className="velu-footer">
         Powered by <a href="https://getvelu.com" target="_blank" rel="noopener noreferrer">Velu</a>

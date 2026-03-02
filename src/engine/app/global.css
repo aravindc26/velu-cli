@@ -588,6 +588,284 @@ nextjs-portal {
   color: var(--color-fd-muted-foreground);
 }
 
+.velu-page-feedback-wrap {
+  margin-top: 2.75rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.velu-page-feedback-block {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.velu-page-feedback-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.velu-page-feedback-question {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--color-fd-foreground);
+}
+
+.velu-page-feedback-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.velu-page-feedback-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+  height: 1.72rem;
+  padding: 0 0.6rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+
+.velu-page-feedback-btn:hover {
+  color: var(--color-fd-foreground);
+  border-color: color-mix(in oklab, var(--color-fd-primary) 45%, var(--color-fd-border));
+  background: color-mix(in oklab, var(--color-fd-primary) 8%, transparent);
+}
+
+.velu-page-feedback-btn.is-active {
+  color: var(--color-fd-foreground);
+  border-color: color-mix(in oklab, var(--color-fd-primary) 55%, var(--color-fd-border));
+}
+
+.velu-page-feedback-btn svg {
+  width: 0.76rem;
+  height: 0.76rem;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.velu-page-feedback-panel {
+  border-top: 1px solid var(--color-fd-border);
+  padding-top: 1rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.velu-page-feedback-panel-title {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  font-weight: 600;
+  color: var(--color-fd-foreground);
+}
+
+.velu-page-feedback-options {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.velu-page-feedback-option {
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: fit-content;
+  max-width: 100%;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  text-align: left;
+  padding: 0.12rem 0;
+  cursor: pointer;
+}
+
+.velu-page-feedback-option:hover {
+  color: var(--color-fd-foreground);
+}
+
+.velu-page-feedback-option.is-checked {
+  color: var(--color-fd-foreground);
+}
+
+.velu-page-feedback-radio {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-fd-muted-foreground) 50%, var(--color-fd-border));
+  box-shadow: inset 0 0 0 0 transparent;
+  flex-shrink: 0;
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+
+.velu-page-feedback-option.is-checked .velu-page-feedback-radio {
+  border-color: var(--color-fd-primary);
+  background: color-mix(in oklab, var(--color-fd-primary) 16%, transparent);
+  box-shadow: inset 0 0 0 3px var(--color-fd-primary);
+}
+
+.velu-page-feedback-inputs {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.velu-page-feedback-input {
+  width: 100%;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.75rem;
+  background: transparent;
+  color: var(--color-fd-foreground);
+  font: inherit;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  padding: 0.68rem 0.8rem;
+}
+
+.velu-page-feedback-input::placeholder {
+  color: var(--color-fd-muted-foreground);
+}
+
+.velu-page-feedback-input:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--color-fd-primary) 55%, var(--color-fd-border));
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-fd-primary) 22%, transparent);
+}
+
+.velu-page-feedback-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.velu-page-feedback-cancel,
+.velu-page-feedback-submit {
+  border-radius: 999px;
+  height: 2rem;
+  padding: 0 0.9rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.velu-page-feedback-cancel {
+  border: 1px solid var(--color-fd-border);
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+}
+
+.velu-page-feedback-cancel:hover {
+  color: var(--color-fd-foreground);
+  border-color: color-mix(in oklab, var(--color-fd-primary) 35%, var(--color-fd-border));
+}
+
+.velu-page-feedback-submit {
+  border: 1px solid color-mix(in oklab, var(--color-fd-primary) 45%, var(--color-fd-border));
+  background: var(--color-fd-foreground);
+  color: var(--color-fd-background);
+}
+
+.velu-page-feedback-submit:hover {
+  filter: brightness(0.96);
+}
+
+.velu-page-nav-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.velu-page-nav-grid-one {
+  grid-template-columns: 1fr;
+}
+
+.velu-page-nav-grid-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.velu-page-nav-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.85rem;
+  padding: 1rem 1.1rem;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.velu-page-nav-card:hover {
+  border-color: color-mix(in oklab, var(--color-fd-primary) 45%, var(--color-fd-border));
+  background: color-mix(in oklab, var(--color-fd-primary) 8%, transparent);
+}
+
+.velu-page-nav-card-next {
+  text-align: right;
+}
+
+.velu-page-nav-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-fd-foreground);
+  line-height: 1.25;
+}
+
+.velu-page-nav-meta {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.velu-page-nav-meta-next {
+  justify-content: flex-end;
+}
+
+.velu-page-nav-meta svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .velu-page-nav-grid-two {
+    grid-template-columns: 1fr;
+  }
+
+  .velu-page-nav-card-next {
+    text-align: left;
+  }
+
+  .velu-page-nav-meta-next {
+    justify-content: flex-start;
+  }
+}
+
 .velu-footer a {
   color: var(--color-fd-primary);
   font-weight: 600;
