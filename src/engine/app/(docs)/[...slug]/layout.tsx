@@ -151,14 +151,19 @@ function buildNavbarTabs(tree: unknown): Array<{
     ? (tree as { children: unknown[] }).children
     : [];
 
-  const rootFolder = rootChildren.find((child) => {
+  const rootFolders = rootChildren.filter((child) => {
     const node = child as PageTreeFolderNode;
     return node?.type === 'folder' && node.root === true;
-  }) as PageTreeFolderNode | undefined;
+  }) as PageTreeFolderNode[];
 
-  const tabFolders = Array.isArray(rootFolder?.children)
-    ? rootFolder!.children.filter((child) => (child as PageTreeFolderNode)?.type === 'folder') as PageTreeFolderNode[]
-    : rootChildren.filter((child) => (child as PageTreeFolderNode)?.type === 'folder') as PageTreeFolderNode[];
+  // Two shapes are supported:
+  // 1) Multiple root folders => each root folder is a top-level tab.
+  // 2) Single root folder containing tab folders as children.
+  const tabFolders: PageTreeFolderNode[] = rootFolders.length > 1
+    ? rootFolders
+    : (rootFolders.length === 1 && Array.isArray(rootFolders[0]?.children)
+      ? rootFolders[0].children.filter((child) => (child as PageTreeFolderNode)?.type === 'folder') as PageTreeFolderNode[]
+      : rootChildren.filter((child) => (child as PageTreeFolderNode)?.type === 'folder') as PageTreeFolderNode[]);
 
   const tabs = tabFolders
     .map((folder) => {
@@ -251,6 +256,30 @@ function scopeTreeToTab<T extends { children?: unknown[] }>(
   if (!normalizedTab) return tree;
 
   const topChildren = Array.isArray(tree.children) ? tree.children : [];
+  const rootFolders = topChildren.filter((child) => {
+    const node = child as PageTreeFolderNode;
+    return node?.type === 'folder' && node.root === true;
+  }) as PageTreeFolderNode[];
+
+  // When docs have multiple top-level root folders (tabs), avoid rendering
+  // the sidebar root switcher. Show only the active tab's children.
+  if (rootFolders.length > 1) {
+    const activeTopTab = (containerSlug ?? tabSlug ?? '').trim().toLowerCase();
+    if (!activeTopTab) return tree;
+
+    const matchedRoot = rootFolders.find((folder) => {
+      const urls = collectFolderUrls(folder);
+      for (const url of urls) {
+        const segments = url.split('/').filter(Boolean).map((segment) => segment.toLowerCase());
+        if ((segments[0] ?? '') === activeTopTab) return true;
+      }
+      return false;
+    });
+
+    if (!matchedRoot || !Array.isArray(matchedRoot.children)) return tree;
+    return { ...tree, children: matchedRoot.children } as T;
+  }
+
   const rootFolder = topChildren.find((child) => {
     const node = child as PageTreeFolderNode;
     return node?.type === 'folder' && node.root === true;
@@ -297,7 +326,6 @@ export default async function SlugLayout({ children, params }: SlugLayoutProps) 
   const currentVersion = resolveCurrentVersion(resolvedParams.slug, versions);
   const currentProduct = resolveCurrentProduct(resolvedParams.slug, products);
   const { containerSlug, tabSlug: currentTabSlug } = resolveTabContext(resolvedParams.slug);
-
   const activePrefix = currentVersion?.slug ?? currentProduct?.slug;
   const containerScopedTree = filterTreeBySlugPrefix(source.getPageTree(locale), activePrefix);
   const rawTree = scopeTreeToTab(containerScopedTree, currentTabSlug, containerSlug);
