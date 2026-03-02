@@ -68,10 +68,13 @@ export function VeluImageZoomFallback() {
 
     applyZoomableMarkers(document);
 
+    const observerOptions: MutationObserverInit = { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "src", "noZoom", "nozoom"] };
     const observer = new MutationObserver(() => {
+      observer.disconnect();
       applyZoomableMarkers(document);
+      observer.observe(pageRoot, observerOptions);
     });
-    observer.observe(pageRoot, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "src", "noZoom", "nozoom"] });
+    observer.observe(pageRoot, observerOptions);
 
     const onClickCapture = (event: MouseEvent) => {
       const target = event.target as Element | null;

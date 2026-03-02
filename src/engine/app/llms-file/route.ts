@@ -3,8 +3,8 @@ import {
   getSiteTitle,
   normalizePath,
   readCustomLlmsFile,
-  resolveRequestOrigin,
 } from '@/lib/llms';
+import { getSiteOrigin } from '@/lib/velu';
 
 export const dynamic = 'force-static';
 
@@ -24,7 +24,7 @@ function toSpecUrl(origin: string, spec: string): string {
   return `${origin}${normalizePath(trimmed)}`;
 }
 
-export async function GET(request: Request) {
+export async function GET() {
   const custom = await readCustomLlmsFile('llms.txt');
   if (custom !== null) {
     return new Response(custom, {
@@ -38,7 +38,7 @@ export async function GET(request: Request) {
   }
 
   const siteTitle = getSiteTitle();
-  const origin = resolveRequestOrigin(request);
+  const origin = getSiteOrigin();
   const pages = await collectLlmsPages();
   const docsPages = pages.filter((page) => !page.noindex && !(page.sourceKind === 'generated' && page.isOpenApiOperation));
   const openApiSpecs = Array.from(

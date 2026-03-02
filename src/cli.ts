@@ -1,5 +1,5 @@
 import { resolve, join, dirname, delimiter } from "node:path";
-import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, cpSync, rmSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -195,11 +195,23 @@ async function paths(docsDir: string) {
 
 async function generateProject(docsDir: string): Promise<string> {
   const { build } = await import("./build.js");
-  // Place .velu-out inside CLI package dir so node_modules resolves
-  // naturally by walking up — avoids symlinks that Turbopack rejects.
-  const outDir = join(PACKAGE_ROOT, ".velu-out");
+  // Generate into the active docs project directory.
+  const outDir = join(docsDir, ".velu-out");
   build(docsDir, outDir);
   return outDir;
+}
+
+function samePath(a: string, b: string): boolean {
+  return resolve(a).replace(/\\/g, "/").toLowerCase() === resolve(b).replace(/\\/g, "/").toLowerCase();
+}
+
+function prepareRuntimeOutDir(docsOutDir: string): string {
+  const runtimeOutDir = join(PACKAGE_ROOT, ".velu-out");
+  if (samePath(docsOutDir, runtimeOutDir)) return runtimeOutDir;
+
+  rmSync(runtimeOutDir, { recursive: true, force: true });
+  cpSync(docsOutDir, runtimeOutDir, { recursive: true, force: true });
+  return runtimeOutDir;
 }
 
 async function buildStatic(outDir: string, docsDir: string) {
@@ -245,10 +257,19 @@ function exportMarkdownRoutes(outDir: string) {
 }
 
 async function buildSite(docsDir: string) {
-  const outDir = await generateProject(docsDir);
-  await buildStatic(outDir, docsDir);
-  exportMarkdownRoutes(outDir);
-  const staticOutDir = join(outDir, "dist");
+  const docsOutDir = await generateProject(docsDir);
+  const runtimeOutDir = prepareRuntimeOutDir(docsOutDir);
+  await buildStatic(runtimeOutDir, docsDir);
+  exportMarkdownRoutes(runtimeOutDir);
+
+  if (!samePath(docsOutDir, runtimeOutDir)) {
+    const docsDistDir = join(docsOutDir, "dist");
+    const runtimeDistDir = join(runtimeOutDir, "dist");
+    rmSync(docsDistDir, { recursive: true, force: true });
+    cpSync(runtimeDistDir, docsDistDir, { recursive: true, force: true });
+  }
+
+  const staticOutDir = join(docsOutDir, "dist");
   console.log(`\n📁 Static site output: ${staticOutDir}`);
 }
 
@@ -269,8 +290,9 @@ function spawnServer(outDir: string, command: string, port: number, docsDir: str
 }
 
 async function run(docsDir: string, port: number) {
-  const outDir = await generateProject(docsDir);
-  spawnServer(outDir, "dev", port, docsDir);
+  const docsOutDir = await generateProject(docsDir);
+  const runtimeOutDir = prepareRuntimeOutDir(docsOutDir);
+  spawnServer(runtimeOutDir, "dev", port, docsDir);
 }
 
 // ── Parse args ───────────────────────────────────────────────────────────────────

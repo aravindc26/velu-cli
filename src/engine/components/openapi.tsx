@@ -766,26 +766,26 @@ function collectResponseHeaderFields(response: OpenApiRecord): NormalizedField[]
   const headers = toRecord(response.headers);
   if (!headers) return [];
 
-  return Object.entries(headers)
-    .map(([headerName, rawHeader]) => {
-      const headerObject = toRecord(rawHeader);
-      if (!headerObject) return null;
+  const fields: NormalizedField[] = [];
+  for (const [headerName, rawHeader] of Object.entries(headers)) {
+    const headerObject = toRecord(rawHeader);
+    if (!headerObject) continue;
 
-      const schema = headerObjectSchema(headerObject);
-      const description = typeof headerObject.description === 'string'
-        ? headerObject.description
-        : (typeof schema?.description === 'string' ? schema.description : undefined);
+    const schema = headerObjectSchema(headerObject);
+    const description = typeof headerObject.description === 'string'
+      ? headerObject.description
+      : (typeof schema?.description === 'string' ? schema.description : undefined);
 
-      return {
-        name: headerName,
-        type: resolveSchemaType(schema),
-        required: Boolean(headerObject.required),
-        deprecated: Boolean(headerObject.deprecated ?? schema?.deprecated),
-        defaultValue: stringifyDefaultValue(schema?.default),
-        description,
-      } satisfies NormalizedField;
-    })
-    .filter((field): field is NormalizedField => Boolean(field));
+    fields.push({
+      name: headerName,
+      type: resolveSchemaType(schema),
+      required: Boolean(headerObject.required),
+      deprecated: Boolean(headerObject.deprecated ?? schema?.deprecated),
+      defaultValue: stringifyDefaultValue(schema?.default),
+      description,
+    } satisfies NormalizedField);
+  }
+  return fields;
 }
 
 function renderAuthorizationSection(method: MethodInformation, ctx: RenderContext): ReactNode {
@@ -1591,6 +1591,11 @@ export async function VeluOpenAPI({
           && normalizeWebhookName(resolvedTarget.item.name) !== normalizeWebhookName(endpointPath))
       ),
   );
+  const fallbackTargetLabel = resolvedTarget
+    ? (resolvedTarget.type === 'operation'
+      ? `${resolvedTarget.item.method.toUpperCase()} ${resolvedTarget.item.path}`
+      : `WEBHOOK ${resolvedTarget.item.name}`)
+    : '';
 
   return (
     <section className={className}>
@@ -1598,9 +1603,7 @@ export async function VeluOpenAPI({
         <div className="velu-openapi-warning">
           <p>
             Could not find <code>{endpointMethod.toUpperCase()} {endpointPath}</code> in <code>{inlineDocument ? inlineDocumentId : schemaSource}</code>.
-            Showing <code>{resolvedTarget!.type === 'operation'
-              ? `${resolvedTarget.item.method.toUpperCase()} ${resolvedTarget.item.path}`
-              : `WEBHOOK ${resolvedTarget.item.name}`}</code> instead.
+            Showing <code>{fallbackTargetLabel}</code> instead.
           </p>
         </div>
       ) : null}

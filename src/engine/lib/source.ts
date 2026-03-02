@@ -99,9 +99,9 @@ function openApiSidebarMethodBadgePlugin() {
 
 export const source = loader({
   baseUrl: '/',
-  source: docsCollection.toFumadocsSource(),
+  source: docsCollection.toFumadocsSource() as any,
   plugins: [
-    openApiSidebarMethodBadgePlugin(),
+    openApiSidebarMethodBadgePlugin() as any,
     statusBadgesPlugin({
       renderBadge: (status: string) => {
         const normalized = status.trim().toLowerCase();

@@ -556,9 +556,10 @@ export default async function Page({ params }: PageProps) {
 
   if (!page) notFound();
 
-  const MDX = page.data.body;
-  const sourceMarkdown = await loadMarkdownForSlug(pageSlug, locale, hasI18n);
   const pageDataRecord = (page.data as unknown) as Record<string, unknown>;
+  const MDX = pageDataRecord.body as any;
+  if (typeof MDX !== 'function') notFound();
+  const sourceMarkdown = await loadMarkdownForSlug(pageSlug, locale, hasI18n);
   const dataMarkdown = typeof pageDataRecord.processedMarkdown === 'string'
     ? String(pageDataRecord.processedMarkdown)
     : undefined;
@@ -589,8 +590,14 @@ export default async function Page({ params }: PageProps) {
   const playgroundDisplay = normalizePlaygroundDisplay(frontmatter.playground, apiConfig.playgroundDisplay);
   const proxyUrl = apiConfig.playgroundProxyEnabled ? '/api/proxy' : '';
   const authMethod = normalizeAuthMethod(frontmatter.authMethod, apiConfig.authMethod);
+  const inlineApiTitle = typeof pageDataRecord.title === 'string' && pageDataRecord.title.trim().length > 0
+    ? pageDataRecord.title
+    : (frontmatter.title ?? pageSlug);
+  const inlineApiDescription = typeof pageDataRecord.description === 'string'
+    ? pageDataRecord.description
+    : frontmatter.description;
   const inlineApiDoc = parsedApiFrontmatter
-    ? buildInlineApiDoc(parsedApiFrontmatter, page.data.title, page.data.description, authMethod, apiConfig.authName)
+    ? buildInlineApiDoc(parsedApiFrontmatter, inlineApiTitle, inlineApiDescription, authMethod, apiConfig.authName)
     : null;
   const hasPanelExamples = typeof effectiveMarkdown === 'string'
     && /<(?:Panel|RequestExample|ResponseExample)(?:\s|>)/.test(effectiveMarkdown);
@@ -616,7 +623,9 @@ export default async function Page({ params }: PageProps) {
       <div id="velu-api-toc-rail-host" />
     </div>
   ) : undefined;
-  const toc = hasChangelog ? parsedChangelog.toc : page.data.toc;
+  const pageToc = pageDataRecord.toc as any;
+  const pageFull = typeof pageDataRecord.full === 'boolean' ? pageDataRecord.full : undefined;
+  const toc = hasChangelog ? parsedChangelog.toc : pageToc;
   const tableOfContentHeader = apiTocHeader ?? (hasPanelExamples ? <div className="velu-toc-panel-rail" /> : undefined);
   const orderedPages = hasI18n ? source.getPages(locale) : source.getPages();
   const currentPageUrl = (typeof sourcePageUrl === 'string' && sourcePageUrl.trim())
@@ -643,12 +652,12 @@ export default async function Page({ params }: PageProps) {
   }
 
   return (
-    <DocsPage
-      toc={toc}
-      full={hasChangelog ? false : (hasApiTocRail ? false : page.data.full)}
-      tableOfContent={tableOfContentHeader ? { header: tableOfContentHeader } : undefined}
-      footer={{ enabled: false }}
-    >
+      <DocsPage
+        toc={toc}
+        full={hasChangelog ? false : (hasApiTocRail ? false : pageFull)}
+        tableOfContent={tableOfContentHeader ? { header: tableOfContentHeader } : undefined}
+        footer={{ enabled: false }}
+      >
       <div
         data-pagefind-body
         data-pagefind-meta={metaAttrs.join(',')}
@@ -836,17 +845,17 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     height: Number(ogImageHeight),
   }));
   const twitterImages = twitterImagesRaw.map((entry) => toAbsoluteMetaUrl(siteOrigin, entry));
-  const openGraph: NonNullable<Metadata['openGraph']> = {
-    type: (mergedMetatags['og:type'] as NonNullable<Metadata['openGraph']>['type']) || 'website',
+  const openGraph: Metadata['openGraph'] = {
+    type: (mergedMetatags['og:type'] as any) || 'website',
     siteName: mergedMetatags['og:site_name'] || siteName,
     title: mergedMetatags['og:title'] || resolvedTitle,
     ...(resolvedDescription ? { description: mergedMetatags['og:description'] || resolvedDescription } : {}),
     url: mergedMetatags['og:url'] ? toAbsoluteMetaUrl(siteOrigin, mergedMetatags['og:url']) : canonical,
     ...(mergedMetatags['og:locale'] ? { locale: mergedMetatags['og:locale'] } : {}),
-    ...(openGraphImages.length > 0 ? { images: openGraphImages as NonNullable<Metadata['openGraph']>['images'] } : {}),
+    ...(openGraphImages.length > 0 ? { images: openGraphImages as any } : {}),
   };
-  const twitter: NonNullable<Metadata['twitter']> = {
-    card: (mergedMetatags['twitter:card'] as NonNullable<Metadata['twitter']>['card']) || 'summary_large_image',
+  const twitter: Metadata['twitter'] = {
+    card: (mergedMetatags['twitter:card'] as any) || 'summary_large_image',
     title: mergedMetatags['twitter:title'] || resolvedTitle,
     ...(resolvedDescription ? { description: mergedMetatags['twitter:description'] || resolvedDescription } : {}),
     ...(mergedMetatags['twitter:site'] ? { site: mergedMetatags['twitter:site'] } : {}),

@@ -6,7 +6,7 @@ import {
   parseChangelogFromMarkdown,
   parseFrontmatterValue,
 } from '@/lib/changelog';
-import { getLanguages } from '@/lib/velu';
+import { getLanguages, getSiteOrigin } from '@/lib/velu';
 
 interface RouteParams {
   slug?: string[];
@@ -85,7 +85,7 @@ export async function generateStaticParams() {
   return out;
 }
 
-export async function GET(request: Request, { params }: { params: Promise<RouteParams> }) {
+export async function GET(_request: Request, { params }: { params: Promise<RouteParams> }) {
   const resolvedParams = await params;
   const fullSlug = resolvedParams.slug ?? [];
 
@@ -120,14 +120,7 @@ export async function GET(request: Request, { params }: { params: Promise<RouteP
     });
   }
 
-  const requestUrl = new URL(request.url);
-  const forwardedHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
-  const forwardedProto = request.headers.get('x-forwarded-proto') ?? requestUrl.protocol.replace(':', '');
-  const devPort = process.env.PORT?.trim();
-  const fallbackOrigin = (requestUrl.hostname === 'localhost' && requestUrl.port === '3000' && devPort)
-    ? `${requestUrl.protocol}//${requestUrl.hostname}:${devPort}`
-    : requestUrl.origin;
-  const origin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : fallbackOrigin;
+  const origin = getSiteOrigin();
   const pagePath = normalizePath(fullSlug.join('/'));
   const pageUrl = `${origin}${pagePath}`;
   const rssUrl = `${pageUrl.replace(/\/$/, '')}/rss.xml`;

@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { collectLlmsPages, normalizePath } from '@/lib/llms';
 import { getSeoConfig, getSiteOrigin } from '@/lib/velu';
 
+export const dynamic = 'force-static';
+
 function escapeXml(value: string): string {
   return value
     .replace(/&/g, '&amp;')

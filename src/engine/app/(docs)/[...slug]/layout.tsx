@@ -173,13 +173,7 @@ function buildNavbarTabs(tree: unknown): Array<{
         urls,
       };
     })
-    .filter((tab): tab is {
-      url: string;
-      title: ReactNode;
-      icon?: ReactNode;
-      description?: ReactNode;
-      urls: Set<string>;
-    } => tab !== null);
+    .filter((tab): tab is NonNullable<typeof tab> => tab !== null);
 
   return tabs.length > 0 ? tabs : undefined;
 }
@@ -265,7 +259,7 @@ function scopeTreeToTab<T extends { children?: unknown[] }>(
   if (!rootFolder || !Array.isArray(rootFolder.children)) return tree;
 
   const normalizedContainer = (containerSlug ?? '').trim().toLowerCase();
-  const matchingChildren = rootFolder.children.filter((child) => {
+  const matchingChildren = rootFolder.children.filter((child): child is PageTreeFolderNode => {
     const folder = child as PageTreeFolderNode;
     if (folder?.type !== 'folder') return false;
 

@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getSeoConfig, getSiteOrigin } from '@/lib/velu';
 
+export const dynamic = 'force-static';
+
 async function readCustomRobotsFile(): Promise<string | null> {
   const docsDir = process.env.VELU_DOCS_DIR?.trim();
   if (docsDir) {
