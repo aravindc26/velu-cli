@@ -61,6 +61,11 @@ function init(targetDir: string) {
   const config = {
     $schema: "https://raw.githubusercontent.com/aravindc26/velu/main/schema/velu.schema.json",
     theme: "neutral" as const,
+    colors: {
+      primary: "#DC143C",
+      light: "#DC143C",
+      dark: "#DC143C",
+    },
     navigation: {
       tabs: [
         {
