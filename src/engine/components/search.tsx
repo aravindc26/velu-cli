@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
-import { usePathname } from 'next/navigation';
+import { useEffect, useRef, useState, useCallback, type KeyboardEvent } from 'react';
 
 interface PagefindResult {
   url: string;
@@ -30,42 +29,71 @@ interface SearchFilters {
   product?: string;
 }
 
-// Extract language and version/product from URL path
-// Format: /[lang]/[version|product]/... or /[version|product]/...
-function extractFiltersFromPath(pathname: string): SearchFilters {
-  const filters: SearchFilters = {};
-  const segments = pathname.split('/').filter(Boolean);
-  
-  // Common language codes (expand as needed)
-  const langCodes = new Set(['en', 'ja', 'es', 'fr', 'de', 'zh', 'ko', 'pt', 'ru', 'ar']);
-  
-  if (segments.length === 0) return filters;
-  
-  // Check if first segment is a language code
-  const firstSeg = segments[0];
-  if (langCodes.has(firstSeg)) {
-    filters.language = firstSeg;
-    // Look for version/product in second segment
-    if (segments.length > 1) {
-      const secondSeg = segments[1];
-      // Version patterns: v1, v2, v1.0, 1.0, etc.
-      if (/^v?\d/.test(secondSeg)) {
-        filters.version = secondSeg;
-      } else {
-        // Could be a product slug
-        filters.product = secondSeg;
-      }
-    }
-  } else {
-    // First segment might be version or product
-    if (/^v?\d/.test(firstSeg)) {
-      filters.version = firstSeg;
-    } else {
-      filters.product = firstSeg;
+function parseFilterAttribute(value: string | null): SearchFilters {
+  const out: SearchFilters = {};
+  if (!value) return out;
+
+  for (const entry of value.split(',')) {
+    const part = entry.trim();
+    if (!part) continue;
+    const index = part.indexOf(':');
+    if (index <= 0) continue;
+    const key = part.slice(0, index).trim();
+    const val = part.slice(index + 1).trim();
+    if (!val) continue;
+    if (key === 'language') out.language = val;
+    if (key === 'version') out.version = val;
+    if (key === 'product') out.product = val;
+  }
+  return out;
+}
+
+function getActiveFiltersFromPage(): SearchFilters {
+  if (typeof document === 'undefined') return {};
+  const node = document.querySelector('[data-pagefind-body]');
+  if (!node) return {};
+  return parseFilterAttribute(node.getAttribute('data-pagefind-filter'));
+}
+
+function detectSiteBasePath(): string {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return '';
+  const scripts = Array.from(document.querySelectorAll('script[src]')) as HTMLScriptElement[];
+  for (const script of scripts) {
+    const src = script.getAttribute('src');
+    if (!src || !src.includes('/_next/static/')) continue;
+    try {
+      const parsed = new URL(src, window.location.origin);
+      const marker = '/_next/static/';
+      const idx = parsed.pathname.indexOf(marker);
+      if (idx >= 0) return parsed.pathname.slice(0, idx);
+    } catch {
+      // ignore invalid script URL and continue
     }
   }
-  
-  return filters;
+  return '';
+}
+
+async function loadPagefindRuntime(): Promise<PagefindInstance | null> {
+  const basePath = detectSiteBasePath().replace(/\/+$/, '');
+  const candidates = Array.from(
+    new Set([
+      basePath ? `${basePath}/pagefind/pagefind.js` : '',
+      '/pagefind/pagefind.js',
+    ].filter(Boolean)),
+  );
+
+  for (const path of candidates) {
+    try {
+      const moduleLoader = new Function('modulePath', 'return import(modulePath)');
+      const mod = await moduleLoader(path) as unknown as PagefindInstance;
+      await mod.init();
+      return mod;
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return null;
 }
 
 export function PagefindSearch({
@@ -78,20 +106,20 @@ export function PagefindSearch({
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const pagefindRef = useRef<PagefindInstance | null>(null);
-  const pathname = usePathname();
+  const resultRefs = useRef<Array<HTMLAnchorElement | null>>([]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PagefindResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [available, setAvailable] = useState(true);
   const [activeFilters, setActiveFilters] = useState<SearchFilters>({});
+  const [activeIndex, setActiveIndex] = useState<number>(-1);
 
-  // Extract filters from current URL when search opens
+  // Extract page-level filters from rendered metadata when search opens.
   useEffect(() => {
-    if (open && pathname) {
-      const filters = extractFiltersFromPath(pathname);
-      setActiveFilters(filters);
+    if (open) {
+      setActiveFilters(getActiveFiltersFromPage());
     }
-  }, [open, pathname]);
+  }, [open]);
 
   useEffect(() => {
     async function loadPagefind() {
@@ -100,10 +128,8 @@ export function PagefindSearch({
         return;
       }
       try {
-        // Bypass bundler resolution — pagefind.js only exists in the static output
-        const pf = await new Function('return import("/pagefind/pagefind.js")')();
-        await pf.init();
-        pagefindRef.current = pf as unknown as PagefindInstance;
+        pagefindRef.current = await loadPagefindRuntime();
+        if (!pagefindRef.current) setAvailable(false);
       } catch {
         setAvailable(false);
       }
@@ -119,14 +145,32 @@ export function PagefindSearch({
       dialogRef.current?.close();
       setQuery('');
       setResults([]);
+      setActiveIndex(-1);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!results.length) {
+      setActiveIndex(-1);
+      return;
+    }
+    if (activeIndex >= results.length) {
+      setActiveIndex(results.length - 1);
+    }
+  }, [results, activeIndex]);
+
+  useEffect(() => {
+    if (activeIndex < 0) return;
+    const node = resultRefs.current[activeIndex];
+    node?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex]);
 
   const search = useCallback(
     async (q: string) => {
       setQuery(q);
       if (!q.trim() || !pagefindRef.current) {
         setResults([]);
+        setActiveIndex(-1);
         return;
       }
       setLoading(true);
@@ -137,20 +181,57 @@ export function PagefindSearch({
         if (activeFilters.version) filters.version = activeFilters.version;
         if (activeFilters.product) filters.product = activeFilters.product;
 
-        const response = await pagefindRef.current.search(q, 
-          Object.keys(filters).length > 0 ? { filters } : undefined
+        const withFilters = Object.keys(filters).length > 0;
+        const response = await pagefindRef.current.search(
+          q,
+          withFilters ? { filters } : undefined,
         );
+
+        // If scoped filters return nothing, fall back to global results
+        // to avoid false "No results" from stale/missing filter metadata.
+        const fallbackResponse = withFilters && response.results.length === 0
+          ? await pagefindRef.current.search(q)
+          : response;
+
         const items = await Promise.all(
-          response.results.slice(0, 8).map((r) => r.data())
+          fallbackResponse.results.slice(0, 8).map((r) => r.data()),
         );
         setResults(items);
+        setActiveIndex(items.length > 0 ? 0 : -1);
       } catch {
         setResults([]);
+        setActiveIndex(-1);
       }
       setLoading(false);
     },
     [activeFilters]
   );
+
+  const onInputKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+    if (!results.length) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveIndex((prev) => (prev < 0 ? 0 : (prev + 1) % results.length));
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveIndex((prev) => {
+        if (prev < 0) return results.length - 1;
+        return prev === 0 ? results.length - 1 : prev - 1;
+      });
+      return;
+    }
+
+    if (event.key === 'Enter' && activeIndex >= 0 && activeIndex < results.length) {
+      event.preventDefault();
+      const target = results[activeIndex];
+      onOpenChange(false);
+      window.location.href = target.url;
+    }
+  }, [activeIndex, onOpenChange, results]);
 
   return (
     <dialog
@@ -170,6 +251,7 @@ export function PagefindSearch({
             placeholder="Search documentation..."
             value={query}
             onChange={(e) => search(e.target.value)}
+            onKeyDown={onInputKeyDown}
             className="fd-search-input"
           />
           <kbd className="fd-search-kbd" onClick={() => onOpenChange(false)}>
@@ -193,7 +275,12 @@ export function PagefindSearch({
             <a
               key={i}
               href={r.url}
-              className="fd-search-result"
+              ref={(node) => {
+                resultRefs.current[i] = node;
+              }}
+              className={['fd-search-result', activeIndex === i ? 'is-active' : ''].join(' ')}
+              aria-current={activeIndex === i ? 'true' : undefined}
+              onMouseEnter={() => setActiveIndex(i)}
               onClick={() => onOpenChange(false)}
             >
               <span className="fd-search-result-title">

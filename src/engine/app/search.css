@@ -92,6 +92,10 @@
   background: var(--color-fd-accent, #27272a);
 }
 
+.fd-search-result.is-active {
+  background: var(--color-fd-accent, #27272a);
+}
+
 .fd-search-result-title {
   display: block;
   font-weight: 500;

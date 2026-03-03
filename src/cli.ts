@@ -291,6 +291,29 @@ function collectStaticRoutePaths(distDir: string): string[] {
   return Array.from(routes).sort((a, b) => a.localeCompare(b));
 }
 
+function collectMarkdownPaths(distDir: string): string[] {
+  const markdownPaths = new Set<string>();
+
+  function walk(relDir: string) {
+    const absDir = join(distDir, relDir);
+    const entries = readdirSync(absDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const relPath = relDir ? join(relDir, entry.name) : entry.name;
+      if (entry.isDirectory()) {
+        walk(relPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (!entry.name.toLowerCase().endsWith(".md")) continue;
+      const normalized = relPath.replace(/\\/g, "/").replace(/^\/+/, "");
+      markdownPaths.add(`/${normalized}`);
+    }
+  }
+
+  walk("");
+  return Array.from(markdownPaths).sort((a, b) => a.localeCompare(b));
+}
+
 function addStaticRouteCompatibility(outDir: string) {
   const distDir = join(outDir, "dist");
   if (!existsSync(distDir)) return;
@@ -347,6 +370,33 @@ function addStaticRouteCompatibility(outDir: string) {
   if (redirectAdded > 0) {
     const merged = Array.from(existingLines).join("\n") + "\n";
     writeFileSync(redirectsPath, merged, "utf-8");
+  }
+
+  const mdPaths = collectMarkdownPaths(distDir);
+  if (mdPaths.length > 0) {
+    const headersPath = join(distDir, "_headers");
+    let mergedHeaders = existsSync(headersPath) ? readFileSync(headersPath, "utf-8") : "";
+    let headerAdded = 0;
+
+    for (const mdPath of mdPaths) {
+      const block = [
+        mdPath,
+        "  Content-Type: text/markdown; charset=utf-8",
+        "  Content-Disposition: inline",
+        "  X-Content-Type-Options: nosniff",
+        "",
+      ].join("\n");
+      if (mergedHeaders.includes(block)) continue;
+      if (mergedHeaders.length > 0 && !mergedHeaders.endsWith("\n")) mergedHeaders += "\n";
+      if (mergedHeaders.length > 0) mergedHeaders += "\n";
+      mergedHeaders += block;
+      headerAdded += 1;
+    }
+
+    if (headerAdded > 0) {
+      writeFileSync(headersPath, mergedHeaders.replace(/\n{3,}/g, "\n\n").trimEnd() + "\n", "utf-8");
+    }
+    console.log(`📄 Added inline markdown headers for ${mdPaths.length} .md routes`);
   }
 
   console.log(`🔁 Added static compatibility for ${routes.length} routes (${aliasCount} .html aliases, ${redirectAdded} redirects)`);
