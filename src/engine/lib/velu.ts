@@ -936,21 +936,30 @@ export function getContextualOptions(): VeluContextualOption[] {
   const raw = config.contextual?.options;
 
   const ids = raw ?? DEFAULT_CONTEXTUAL_OPTIONS;
+  const options: VeluContextualOption[] = [];
 
-  return ids.map((entry, index) => {
+  ids.forEach((entry, index) => {
     if (typeof entry === 'string') {
       const preset = CONTEXTUAL_PRESETS[entry];
-      if (!preset) return null;
-      return { id: entry, title: preset.title, description: preset.description, type: 'builtin' as const };
+      if (!preset) return;
+      options.push({ id: entry, title: preset.title, description: preset.description, type: 'builtin' });
+      return;
     }
-    return {
+
+    const title = trimString(entry.title);
+    const href = trimString(entry.href);
+    if (!title || !href) return;
+
+    options.push({
       id: `custom-${index}`,
-      title: entry.title,
-      description: entry.description ?? '',
-      href: entry.href,
-      type: 'custom' as const,
-    };
-  }).filter((item): item is VeluContextualOption => item !== null);
+      title,
+      description: trimString(entry.description) ?? '',
+      href,
+      type: 'custom',
+    });
+  });
+
+  return options;
 }
 
 export function getSiteOrigin(): string {
