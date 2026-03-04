@@ -25,6 +25,10 @@ const SOURCE_MIRROR_EXTENSIONS = new Set([
 ]);
 
 const IMPORT_REWRITE_EXTENSIONS = new Set([".md", ".mdx", ".jsx", ".js", ".tsx", ".ts"]);
+const VARIABLE_SUBSTITUTION_EXTENSIONS = new Set([
+  ".md", ".mdx", ".jsx", ".js", ".tsx", ".ts",
+  ".json", ".yaml", ".yml", ".css", ".txt", ".xml", ".csv",
+]);
 
 function resolveConfigPath(docsDir: string): string {
   const primary = join(docsDir, PRIMARY_CONFIG_NAME);
@@ -134,9 +138,13 @@ interface VeluRedirect {
 interface VeluConfig {
   $schema?: string;
   theme?: string;
+  variables?: Record<string, string>;
   colors?: VeluColors;
   appearance?: "system" | "light" | "dark";
   styling?: VeluStyling;
+  metadata?: {
+    timestamp?: boolean;
+  };
   openapi?: VeluOpenApiSource;
   languages?: string[];
   redirects?: VeluRedirect[];
@@ -395,10 +403,112 @@ function normalizeOpenApiSpecForFrontmatter(spec: string | undefined): string | 
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function loadConfig(docsDir: string): VeluConfig {
+const VARIABLE_TOKEN_PATTERN = /\{\{\s*([A-Za-z0-9.-]+)\s*\}\}/g;
+const VARIABLE_NAME_PATTERN = /^[A-Za-z0-9.-]+$/;
+
+function sanitizeVariableValue(value: string): string {
+  return value.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function extractVariables(input: unknown): Record<string, string> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+
+  const output: Record<string, string> = {};
+  for (const [rawKey, rawValue] of Object.entries(input as Record<string, unknown>)) {
+    const key = rawKey.trim();
+    if (!key) continue;
+    if (!VARIABLE_NAME_PATTERN.test(key)) {
+      throw new Error(`Invalid variable name '${rawKey}'. Variable names can only contain letters, numbers, periods, and hyphens.`);
+    }
+    if (typeof rawValue !== "string") {
+      throw new Error(`Invalid value for variable '${rawKey}'. Variables must be strings.`);
+    }
+    output[key] = rawValue;
+  }
+  return output;
+}
+
+function resolveVariableMap(rawVariables: Record<string, string>): Record<string, string> {
+  const cache = new Map<string, string>();
+  const activeStack = new Set<string>();
+
+  function resolveOne(name: string): string {
+    const cached = cache.get(name);
+    if (cached !== undefined) return cached;
+
+    if (activeStack.has(name)) {
+      throw new Error(`Circular variable reference detected for '{{${name}}}'.`);
+    }
+
+    const raw = rawVariables[name];
+    if (raw === undefined) {
+      throw new Error(`Undefined variable '{{${name}}}' referenced in variable definitions.`);
+    }
+
+    activeStack.add(name);
+    const resolved = raw.replace(VARIABLE_TOKEN_PATTERN, (_match, token: string) => resolveOne(token));
+    activeStack.delete(name);
+    cache.set(name, resolved);
+    return resolved;
+  }
+
+  const output: Record<string, string> = {};
+  for (const name of Object.keys(rawVariables)) {
+    output[name] = resolveOne(name);
+  }
+  return output;
+}
+
+function replaceVariablesInString(
+  value: string,
+  variables: Record<string, string>,
+  context: string,
+  sanitizeValues: boolean,
+): string {
+  const undefinedVariables = new Set<string>();
+  const replaced = value.replace(VARIABLE_TOKEN_PATTERN, (match, rawName: string) => {
+    const name = rawName.trim();
+    const resolved = variables[name];
+    if (resolved === undefined) {
+      undefinedVariables.add(name);
+      return match;
+    }
+    return sanitizeValues ? sanitizeVariableValue(resolved) : resolved;
+  });
+
+  if (undefinedVariables.size > 0) {
+    throw new Error(
+      `Undefined variable(s) ${Array.from(undefinedVariables).map((name) => `'{{${name}}}'`).join(", ")} in ${context}.`
+    );
+  }
+
+  return replaced;
+}
+
+function applyVariablesToConfig(value: unknown, variables: Record<string, string>, path = "docs.json"): unknown {
+  if (typeof value === "string") return replaceVariablesInString(value, variables, path, false);
+  if (Array.isArray(value)) return value.map((entry, index) => applyVariablesToConfig(entry, variables, `${path}[${index}]`));
+  if (!value || typeof value !== "object") return value;
+
+  const output: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    output[key] = applyVariablesToConfig(entry, variables, `${path}.${key}`);
+  }
+  return output;
+}
+
+function loadConfig(docsDir: string): { config: VeluConfig; rawConfig: VeluConfig; variables: Record<string, string> } {
   const raw = readFileSync(resolveConfigPath(docsDir), "utf-8");
   const parsed = JSON.parse(raw) as VeluConfig;
-  return normalizeConfigNavigation(parsed);
+  const rawVariables = extractVariables(parsed.variables);
+  const resolvedVariables = resolveVariableMap(rawVariables);
+  const withVariables = applyVariablesToConfig(parsed, resolvedVariables) as VeluConfig;
+  withVariables.variables = resolvedVariables;
+  return {
+    config: normalizeConfigNavigation(withVariables),
+    rawConfig: withVariables,
+    variables: resolvedVariables,
+  };
 }
 
 function isExternalDestination(value: string): boolean {
@@ -673,7 +783,12 @@ function rewriteImportsInContent(
   return out.join("\n");
 }
 
-function copyMirroredSourceFile(srcPath: string, docsDir: string, mirrorDir: string) {
+function copyMirroredSourceFile(
+  srcPath: string,
+  docsDir: string,
+  mirrorDir: string,
+  variables: Record<string, string>,
+) {
   if (!shouldMirrorSourceFile(srcPath)) return;
   if (!isInsideDocsRoot(docsDir, srcPath)) return;
 
@@ -682,16 +797,25 @@ function copyMirroredSourceFile(srcPath: string, docsDir: string, mirrorDir: str
   mkdirSync(dirname(destPath), { recursive: true });
 
   if (shouldRewriteImports(srcPath)) {
-    const raw = readFileSync(srcPath, "utf-8");
+    let raw = readFileSync(srcPath, "utf-8");
+    raw = replaceVariablesInString(raw, variables, relPath, true);
     const rewritten = rewriteImportsInContent(raw, srcPath, destPath, docsDir, mirrorDir);
     writeFileSync(destPath, rewritten, "utf-8");
+    return;
+  }
+
+  const extension = extname(srcPath).toLowerCase();
+  if (VARIABLE_SUBSTITUTION_EXTENSIONS.has(extension)) {
+    const raw = readFileSync(srcPath, "utf-8");
+    const substituted = replaceVariablesInString(raw, variables, relPath, true);
+    writeFileSync(destPath, substituted, "utf-8");
     return;
   }
 
   copyFileSync(srcPath, destPath);
 }
 
-function rebuildSourceMirror(docsDir: string, mirrorDir: string) {
+function rebuildSourceMirror(docsDir: string, mirrorDir: string, variables: Record<string, string>) {
   rmSync(mirrorDir, { recursive: true, force: true });
   mkdirSync(mirrorDir, { recursive: true });
 
@@ -706,7 +830,7 @@ function rebuildSourceMirror(docsDir: string, mirrorDir: string) {
         continue;
       }
       if (!shouldMirrorSourceFile(srcPath)) continue;
-      copyMirroredSourceFile(srcPath, docsDir, mirrorDir);
+      copyMirroredSourceFile(srcPath, docsDir, mirrorDir, variables);
     }
   }
 
@@ -1018,7 +1142,7 @@ function build(docsDir: string, outDir: string) {
   const configPath = resolveConfigPath(docsDir);
   const configName = configPath.endsWith(PRIMARY_CONFIG_NAME) ? PRIMARY_CONFIG_NAME : LEGACY_CONFIG_NAME;
   console.log(`📖 Loading ${configName} from: ${docsDir}`);
-  const config = loadConfig(docsDir);
+  const { config, rawConfig, variables } = loadConfig(docsDir);
 
   if (existsSync(outDir)) {
     rmSync(outDir, { recursive: true, force: true });
@@ -1034,11 +1158,12 @@ function build(docsDir: string, outDir: string) {
   mkdirSync(join(outDir, "content", "docs"), { recursive: true });
   mkdirSync(join(outDir, "public"), { recursive: true });
   const sourceMirrorDir = join(outDir, SOURCE_MIRROR_DIR);
-  rebuildSourceMirror(docsDir, sourceMirrorDir);
+  rebuildSourceMirror(docsDir, sourceMirrorDir, variables);
 
   // ── 3. Copy config into the generated project ────────────────────────────
-  copyFileSync(configPath, join(outDir, PRIMARY_CONFIG_NAME));
-  copyFileSync(configPath, join(outDir, LEGACY_CONFIG_NAME));
+  const serializedConfig = `${JSON.stringify(rawConfig, null, 2)}\n`;
+  writeFileSync(join(outDir, PRIMARY_CONFIG_NAME), serializedConfig, "utf-8");
+  writeFileSync(join(outDir, LEGACY_CONFIG_NAME), serializedConfig, "utf-8");
   console.log(`📋 Copied ${configName} as ${PRIMARY_CONFIG_NAME} (and legacy ${LEGACY_CONFIG_NAME})`);
 
   // ── 3b. Copy static assets from docs project into public/ ─────────────────
@@ -1057,6 +1182,7 @@ function build(docsDir: string, outDir: string) {
   function processPage(srcPath: string, destPath: string, slug: string) {
     mkdirSync(dirname(destPath), { recursive: true });
     let content = readFileSync(srcPath, "utf-8");
+    content = replaceVariablesInString(content, variables, relative(docsDir, srcPath), true);
     if (!content.startsWith("---")) {
       const titleMatch = content.match(/^#\s+(.+)$/m);
       const title = titleMatch ? titleMatch[1] : pageLabelFromSlug(slug);
@@ -1121,7 +1247,9 @@ function build(docsDir: string, outDir: string) {
         const deprecatedLine = mapping.deprecated === true ? `\ndeprecated: true` : "";
         const statusLine = mapping.deprecated === true ? `\nstatus: "deprecated"` : "";
         const versionLine = version ? `\nversion: "${version}"` : "";
-        const content = typeof mapping.content === "string" ? `${mapping.content.trim()}\n` : "";
+        const content = typeof mapping.content === "string"
+          ? `${replaceVariablesInString(mapping.content.trim(), variables, `openapi:${mapping.dest}`, true)}\n`
+          : "";
         writeFileSync(
           destPath,
           `---\ntitle: "${title}"${descriptionLine}${deprecatedLine}${statusLine}${versionLine}\nopenapi: "${openapi}"\n---\n${warning}${content}`,

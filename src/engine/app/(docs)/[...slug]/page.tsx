@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
@@ -14,13 +14,26 @@ import { getMDXComponents } from '@/mdx-components';
 import { source } from '@/lib/source';
 import { VeluManualApiPlayground } from '@/components/manual-api-playground';
 import { VeluOpenAPI, VeluOpenAPISchema } from '@/components/openapi';
-import { getApiConfig, getLanguages, getVersionOptions, getProductOptions, getSeoConfig, getSiteName, getSiteOrigin } from '@/lib/velu';
+import {
+  getApiConfig,
+  getContextualOptions,
+  getFooterSocials,
+  getLanguages,
+  getMetadataConfig,
+  getVersionOptions,
+  getProductOptions,
+  getSeoConfig,
+  getSiteDescription,
+  getSiteName,
+  getSiteOrigin,
+} from '@/lib/velu';
 import { CopyPageButton } from '@/components/copy-page';
 import { ChangelogFilters } from '@/components/changelog-filters';
 import { VeluImageZoomFallback } from '@/components/image-zoom-fallback';
 import { OpenApiTocSync } from '@/components/openapi-toc-sync';
 import { TocExamples } from '@/components/toc-examples';
 import { PageFeedback } from '@/components/page-feedback';
+import { VeluIcon } from '@/components/icon';
 import { parseChangelogFromMarkdown, parseFrontmatterBoolean } from '@/lib/changelog';
 
 interface RouteParams {
@@ -58,7 +71,12 @@ interface InlineApiDoc {
   method: string;
 }
 
-async function loadMarkdownForSlug(slug: string[], locale: string, hasI18n: boolean): Promise<string | undefined> {
+interface LoadedMarkdown {
+  content: string;
+  modifiedAt?: Date;
+}
+
+async function loadMarkdownForSlug(slug: string[], locale: string, hasI18n: boolean): Promise<LoadedMarkdown | undefined> {
   const rel = slug.join('/');
   const docsRoots = [
     join(process.cwd(), 'content', 'docs'),
@@ -71,13 +89,26 @@ async function loadMarkdownForSlug(slug: string[], locale: string, hasI18n: bool
 
   for (const filePath of paths) {
     try {
-      return await readFile(filePath, 'utf-8');
+      const content = await readFile(filePath, 'utf-8');
+      const stats = await stat(filePath).catch(() => null);
+      return {
+        content,
+        modifiedAt: stats?.mtime,
+      };
     } catch {
       // ignore and continue
     }
   }
 
   return undefined;
+}
+
+function formatLastModifiedDate(value: Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(value);
 }
 
 function resolveLocaleSlug(slugInput: string[] | undefined) {
@@ -555,9 +586,11 @@ function buildInlineApiDoc(
 
 export default async function Page({ params }: PageProps) {
   const resolvedParams = await params;
+  const metadataConfig = getMetadataConfig();
   const { locale, pageSlug } = resolveLocaleSlug(resolvedParams.slug);
   const { locale: filterLocale, version, product } = resolveContextFromSlug(resolvedParams.slug);
   const hasI18n = getLanguages().length > 1;
+  const footerSocials = getFooterSocials();
 
   const page = hasI18n ? source.getPage(pageSlug, locale) : source.getPage(pageSlug);
 
@@ -566,7 +599,11 @@ export default async function Page({ params }: PageProps) {
   const pageDataRecord = (page.data as unknown) as Record<string, unknown>;
   const MDX = pageDataRecord.body as any;
   if (typeof MDX !== 'function') notFound();
-  const sourceMarkdown = await loadMarkdownForSlug(pageSlug, locale, hasI18n);
+  const loadedMarkdown = await loadMarkdownForSlug(pageSlug, locale, hasI18n);
+  const sourceMarkdown = loadedMarkdown?.content;
+  const lastModifiedLabel = metadataConfig.timestamp && loadedMarkdown?.modifiedAt
+    ? formatLastModifiedDate(loadedMarkdown.modifiedAt)
+    : undefined;
   const dataMarkdown = typeof pageDataRecord.processedMarkdown === 'string'
     ? String(pageDataRecord.processedMarkdown)
     : undefined;
@@ -680,7 +717,7 @@ export default async function Page({ params }: PageProps) {
             {isDeprecatedPage ? <span className="velu-pill velu-pill-deprecated velu-page-deprecated-badge">Deprecated</span> : null}
           </div>
           <div className="velu-title-actions">
-            <CopyPageButton />
+            <CopyPageButton options={getContextualOptions()} mcpUrl={getSiteOrigin() + '/mcp'} />
             {showRssButton ? (
               <a className="velu-rss-button" href={rssHref} aria-label="Subscribe to this changelog RSS feed">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -693,6 +730,9 @@ export default async function Page({ params }: PageProps) {
           </div>
         </div>
         {page.data.description ? <DocsDescription>{page.data.description}</DocsDescription> : null}
+        {lastModifiedLabel ? (
+          <p className="velu-page-last-updated">Last updated {lastModifiedLabel}</p>
+        ) : null}
         <DocsBody>
           {!hasExplicitApiRendering && inlineApiDoc && playgroundDisplay === 'interactive' ? (
             <VeluOpenAPI
@@ -770,7 +810,34 @@ export default async function Page({ params }: PageProps) {
         </section>
       </div>
       <footer className="velu-footer">
-        Powered by <a href="https://getvelu.com" target="_blank" rel="noopener noreferrer">Velu</a>
+        {footerSocials.length > 0 ? (
+          <div className="velu-footer-socials" aria-label="Social links">
+            {footerSocials.map((social) => (
+              <a
+                key={`${social.key}:${social.href}`}
+                href={social.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="velu-footer-social-link"
+                aria-label={social.label}
+                title={social.label}
+              >
+                <VeluIcon
+                  name={social.icon}
+                  iconType={social.iconType}
+                  library="fontawesome"
+                  className="velu-footer-social-icon"
+                  fallback={false}
+                />
+              </a>
+            ))}
+          </div>
+        ) : (
+          <span />
+        )}
+        <div className="velu-footer-powered">
+          Powered by <a href="https://getvelu.com" target="_blank" rel="noopener noreferrer">Velu</a>
+        </div>
       </footer>
     </DocsPage>
   );
@@ -804,7 +871,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   if (!page) notFound();
 
-  const sourceMarkdown = await loadMarkdownForSlug(pageSlug, locale, hasI18n);
+  const loadedMarkdown = await loadMarkdownForSlug(pageSlug, locale, hasI18n);
+  const sourceMarkdown = loadedMarkdown?.content;
   const pageDataRecord = (page.data as unknown) as Record<string, unknown>;
   const dataMarkdown = typeof pageDataRecord.processedMarkdown === 'string'
     ? String(pageDataRecord.processedMarkdown)
@@ -835,7 +903,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     || (mergedMetatags.robots ?? '').toLowerCase().includes('none');
   const titleOverride = mergedMetatags.title?.trim();
   const resolvedTitle = titleOverride || `${page.data.title} - ${siteName}`;
-  const resolvedDescription = (mergedMetatags.description?.trim() || page.data.description || '').trim() || undefined;
+  const resolvedDescription = (mergedMetatags.description?.trim() || page.data.description || getSiteDescription() || '').trim() || undefined;
   const generatedSocialImage = buildGeneratedOgImagePath(pageUrl);
   const fallbackImage = mergedMetatags['og:image']
     || mergedMetatags['twitter:image']

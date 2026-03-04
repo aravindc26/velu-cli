@@ -1,5 +1,5 @@
 import { resolve, join, dirname, delimiter } from "node:path";
-import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, cpSync, rmSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, cpSync, rmSync, renameSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -214,7 +214,20 @@ function prepareRuntimeOutDir(docsOutDir: string): string {
   const runtimeOutDir = join(PACKAGE_ROOT, ".velu-out");
   if (samePath(docsOutDir, runtimeOutDir)) return runtimeOutDir;
 
-  rmSync(runtimeOutDir, { recursive: true, force: true });
+  try {
+    rmSync(runtimeOutDir, { recursive: true, force: true });
+  } catch {
+    // On Windows the directory may be locked by a previous dev-server process.
+    // Rename it aside so we can proceed; the stale copy is cleaned up later.
+    const stale = `${runtimeOutDir}-stale-${Date.now()}`;
+    try {
+      renameSync(runtimeOutDir, stale);
+      // Best-effort async cleanup — ignore errors if still locked.
+      try { rmSync(stale, { recursive: true, force: true }); } catch {}
+    } catch {
+      // If even rename fails, try to overwrite in place.
+    }
+  }
   cpSync(docsOutDir, runtimeOutDir, { recursive: true, force: true });
   return runtimeOutDir;
 }

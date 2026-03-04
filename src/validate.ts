@@ -115,6 +115,7 @@ type VeluOpenApiSource = string | string[] | Record<string, unknown>;
 
 interface VeluConfig {
   $schema?: string;
+  variables?: Record<string, string>;
   icons?: {
     library?: "fontawesome" | "lucide" | "tabler";
   };
@@ -145,6 +146,13 @@ interface VeluConfig {
       };
     };
   };
+  metadata?: {
+    timestamp?: boolean;
+  };
+  footer?: {
+    socials?: Record<string, unknown>;
+  };
+  footerSocials?: Record<string, unknown>;
   navigation: {
     openapi?: VeluOpenApiSource;
     asyncapi?: VeluOpenApiSource;

@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { getAppearance, getSeoConfig, getSiteFavicon, getSiteName, getSiteOrigin, getSitePrimaryColor } from '@/lib/velu';
+import { getAppearance, getBannerConfig, getSeoConfig, getSiteDescription, getSiteFavicon, getSiteName, getSiteOrigin, getSitePrimaryColor } from '@/lib/velu';
 import { Providers } from '@/components/providers';
 import { VeluAssistant } from '@/components/assistant';
+import { VeluBanner } from '@/components/banner';
 import './global.css';
 import './search.css';
 import './assistant.css';
@@ -17,10 +18,12 @@ function toAbsoluteUrl(origin: string, value: string): string {
 }
 
 const siteName = getSiteName();
+const siteDescription = getSiteDescription();
 const siteOrigin = getSiteOrigin();
 const seo = getSeoConfig();
 const favicon = getSiteFavicon();
 const primaryColor = getSitePrimaryColor();
+const bannerConfig = getBannerConfig();
 const generatedDefaultSocialImage = '/og/index.svg';
 const defaultSocialImage = seo.metatags['og:image'] ?? seo.metatags['twitter:image'] ?? generatedDefaultSocialImage;
 const absoluteDefaultSocialImage = defaultSocialImage ? toAbsoluteUrl(siteOrigin, defaultSocialImage) : undefined;
@@ -31,6 +34,7 @@ export const metadata: Metadata = {
     default: siteName,
     template: `%s - ${siteName}`,
   },
+  ...(siteDescription ? { description: siteDescription } : {}),
   applicationName: siteName,
   generator: seo.metatags.generator || 'Mintlify',
   appleWebApp: {
@@ -39,12 +43,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName,
+    ...(siteDescription ? { description: siteDescription } : {}),
     ...(absoluteDefaultSocialImage
       ? { images: [{ url: absoluteDefaultSocialImage, width: 1200, height: 630 }] }
       : {}),
   },
   twitter: {
     card: 'summary_large_image',
+    ...(siteDescription ? { description: siteDescription } : {}),
     ...(absoluteDefaultSocialImage ? { images: [absoluteDefaultSocialImage] } : {}),
   },
   ...(favicon
@@ -76,6 +82,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body className="min-h-screen" suppressHydrationWarning>
         <Providers theme={theme}>
+          {bannerConfig && <VeluBanner content={bannerConfig.content} dismissible={bannerConfig.dismissible} />}
           {children}
           <VeluAssistant />
         </Providers>

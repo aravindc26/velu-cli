@@ -7,6 +7,69 @@ body {
   min-height: 100vh;
 }
 
+body:has(.velu-announcement) #nd-docs-layout,
+body:has(.velu-announcement) #nd-notebook-layout {
+  --fd-banner-height: var(--velu-announcement-h, 0px) !important;
+}
+
+/* ── Global announcement banner ── */
+.velu-announcement {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  background-color: var(--color-fd-primary);
+  color: #fff;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  text-align: center;
+  gap: 0.5rem;
+  border-radius: 0;
+  margin: 0;
+  border: none;
+}
+
+.velu-announcement a {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.velu-announcement a:hover {
+  opacity: 0.85;
+}
+
+.velu-announcement-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.velu-announcement-dismiss {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+}
+
+.velu-announcement-dismiss:hover {
+  opacity: 1;
+}
+
 .velu-nav-brand {
   display: inline-flex;
   align-items: center;
@@ -581,11 +644,48 @@ nextjs-portal {
 
 .velu-footer {
   margin-top: 3rem;
-  padding-top: 1.5rem;
+  padding-top: 1.1rem;
   border-top: 1px solid var(--color-fd-border);
-  text-align: right;
-  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 1rem;
   color: var(--color-fd-muted-foreground);
+}
+
+.velu-footer-socials {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.velu-footer-social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-fd-muted-foreground);
+  opacity: 0.78;
+  text-decoration: none;
+  transition: color 0.15s, opacity 0.15s;
+}
+
+.velu-footer-social-link:hover {
+  color: var(--color-fd-foreground);
+  opacity: 1;
+}
+
+.velu-footer-social-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex-shrink: 0;
+}
+
+.velu-footer-powered {
+  margin-left: auto;
+  font-size: 1.15rem;
+  line-height: 1.3;
 }
 
 .velu-page-feedback-wrap {
@@ -867,14 +967,20 @@ nextjs-portal {
   }
 }
 
-.velu-footer a {
+.velu-footer-powered a {
   color: var(--color-fd-primary);
   font-weight: 600;
   text-decoration: none;
 }
 
-.velu-footer a:hover {
+.velu-footer-powered a:hover {
   text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .velu-footer-powered {
+    margin-left: 0;
+  }
 }
 
 [data-card].velu-card-horizontal {

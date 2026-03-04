@@ -40,6 +40,14 @@
       "type": "string",
       "description": "Site name shown in metadata and brand text."
     },
+    "description": {
+      "type": "string",
+      "description": "Default site-wide meta description used for SEO. Applied as a fallback when individual pages do not specify their own description."
+    },
+    "variables": {
+      "$ref": "#/definitions/variablesConfig",
+      "description": "Global variables reusable in docs content and config using {{variableName}} syntax."
+    },
     "title": {
       "type": "string",
       "description": "Legacy alias for site name. Used when `name` is not provided."
@@ -273,6 +281,62 @@
       "$ref": "#/definitions/seoConfig",
       "description": "SEO configuration for metadata and indexing behavior."
     },
+    "metadata": {
+      "$ref": "#/definitions/metadataConfig",
+      "description": "Metadata settings applied across documentation pages."
+    },
+    "footer": {
+      "$ref": "#/definitions/footerConfig",
+      "description": "Footer configuration, including social links."
+    },
+    "footerSocials": {
+      "$ref": "#/definitions/footerSocials",
+      "description": "Legacy alias for footer social links."
+    },
+    "banner": {
+      "type": "object",
+      "description": "Global announcement banner displayed at the top of every page.",
+      "properties": {
+        "content": {
+          "type": "string",
+          "description": "Banner message. Supports plain text and Markdown links."
+        },
+        "dismissible": {
+          "type": "boolean",
+          "description": "Allow users to dismiss the banner.",
+          "default": false
+        }
+      },
+      "required": ["content"]
+    },
+    "contextual": {
+      "type": "object",
+      "description": "Configure which options appear in the page-level contextual menu dropdown (copy, AI chat, MCP, IDE integrations).",
+      "properties": {
+        "options": {
+          "type": "array",
+          "description": "List of contextual menu options. Use built-in IDs (strings) or custom objects with title and href.",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": ["copy", "view", "chatgpt", "claude", "perplexity", "grok", "mcp", "add-mcp", "cursor", "vscode"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" },
+                  "description": { "type": "string" },
+                  "icon": { "type": "string" },
+                  "href": { "type": "string" }
+                },
+                "required": ["title", "href"]
+              }
+            ]
+          }
+        }
+      }
+    },
     "redirects": {
       "type": "array",
       "description": "Permanent or temporary redirects for moved pages.",
@@ -283,153 +347,309 @@
     "navigation": {
       "type": "object",
       "description": "Defines the site navigation hierarchy. Use 'tabs' for single-language sites, or 'languages' for per-language navigation (like Mintlify).",
-      "properties": {
-        "openapi": {
-          "$ref": "#/definitions/openapiSource",
-          "description": "Default OpenAPI source inherited by tabs/groups/pages in this navigation section."
-        },
-        "tabs": {
-          "type": "array",
-          "description": "Top-level navigation tabs (single-language mode). Ignored when 'languages' is present.",
-          "items": {
-            "$ref": "#/definitions/tab"
-          },
-          "minItems": 1
-        },
-        "dropdowns": {
-          "type": "array",
-          "description": "Top-level dropdown containers. Each dropdown can include groups, pages, anchors, or links.",
-          "items": {
-            "$ref": "#/definitions/dropdown"
-          },
-          "minItems": 1
-        },
-        "groups": {
-          "type": "array",
-          "description": "Top-level sidebar groups when tabs/dropdowns are not used.",
-          "items": {
-            "$ref": "#/definitions/group"
-          },
-          "minItems": 1
-        },
-        "pages": {
-          "type": "array",
-          "description": "Top-level pages when tabs/dropdowns are not used.",
-          "items": {
-            "oneOf": [
-              {
-                "$ref": "#/definitions/page"
-              },
-              {
-                "$ref": "#/definitions/separator"
-              },
-              {
-                "$ref": "#/definitions/link"
-              }
-            ]
-          },
-          "minItems": 1
-        },
-        "languages": {
-          "type": "array",
-          "description": "Per-language navigation. Each entry defines tabs/groups/pages for one language. First entry is the default language (no URL prefix).",
-          "items": {
-            "$ref": "#/definitions/languageNav"
-          },
-          "minItems": 1
-        },
-        "products": {
-          "type": "array",
-          "description": "Multi-product navigation. Each product can define its own tabs or top-level pages.",
-          "items": {
-            "$ref": "#/definitions/productNav"
-          },
-          "minItems": 1
-        },
-        "versions": {
-          "type": "array",
-          "description": "Versioned navigation. Each version defines its own set of tabs.",
-          "items": {
-            "$ref": "#/definitions/versionNav"
-          },
-          "minItems": 1
-        },
-        "anchors": {
-          "type": "array",
-          "description": "Prominent external links displayed in the navbar (e.g. GitHub, Discord).",
-          "items": {
-            "$ref": "#/definitions/anchor"
-          }
-        },
-        "global": {
-          "type": "object",
-          "description": "Cross-cutting navigation elements visible on every page.",
+      "oneOf": [
+        {
+          "required": ["tabs"],
           "properties": {
             "tabs": {
               "type": "array",
-              "description": "Global external tabs shown across all pages.",
-              "items": {
-                "$ref": "#/definitions/globalTab"
-              }
+              "description": "Top-level navigation tabs (single-language mode).",
+              "items": { "$ref": "#/definitions/tab" },
+              "minItems": 1
             },
-            "anchors": {
-              "type": "array",
-              "description": "Global anchors shown across all tabs.",
-              "items": {
-                "$ref": "#/definitions/anchor"
-              }
+            "global": {
+              "type": "object",
+              "description": "Cross-cutting navigation elements visible on every page.",
+              "properties": {
+                "tabs": {
+                  "type": "array",
+                  "description": "Global external tabs shown across all pages.",
+                  "items": { "$ref": "#/definitions/globalTab" }
+                },
+                "anchors": {
+                  "type": "array",
+                  "description": "Global anchors shown across all tabs.",
+                  "items": { "$ref": "#/definitions/anchor" }
+                }
+              },
+              "additionalProperties": false
+            },
+            "openapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default OpenAPI source inherited by tabs/groups/pages in this navigation section."
+            },
+            "asyncapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default AsyncAPI source inherited by tabs/groups/pages in this navigation section."
             }
           },
           "additionalProperties": false
         },
-        "asyncapi": {
-          "$ref": "#/definitions/openapiSource",
-          "description": "Default AsyncAPI source inherited by tabs/groups/pages in this navigation section."
+        {
+          "required": ["groups"],
+          "properties": {
+            "groups": {
+              "type": "array",
+              "description": "Top-level sidebar groups when tabs/dropdowns are not used.",
+              "items": { "$ref": "#/definitions/group" },
+              "minItems": 1
+            },
+            "global": {
+              "type": "object",
+              "description": "Cross-cutting navigation elements visible on every page.",
+              "properties": {
+                "tabs": {
+                  "type": "array",
+                  "description": "Global external tabs shown across all pages.",
+                  "items": { "$ref": "#/definitions/globalTab" }
+                },
+                "anchors": {
+                  "type": "array",
+                  "description": "Global anchors shown across all tabs.",
+                  "items": { "$ref": "#/definitions/anchor" }
+                }
+              },
+              "additionalProperties": false
+            },
+            "openapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default OpenAPI source inherited by tabs/groups/pages in this navigation section."
+            },
+            "asyncapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default AsyncAPI source inherited by tabs/groups/pages in this navigation section."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": ["pages"],
+          "properties": {
+            "pages": {
+              "type": "array",
+              "description": "Top-level pages when tabs/dropdowns are not used.",
+              "items": {
+                "oneOf": [
+                  { "$ref": "#/definitions/page" },
+                  { "$ref": "#/definitions/separator" },
+                  { "$ref": "#/definitions/link" }
+                ]
+              },
+              "minItems": 1
+            },
+            "global": {
+              "type": "object",
+              "description": "Cross-cutting navigation elements visible on every page.",
+              "properties": {
+                "tabs": {
+                  "type": "array",
+                  "description": "Global external tabs shown across all pages.",
+                  "items": { "$ref": "#/definitions/globalTab" }
+                },
+                "anchors": {
+                  "type": "array",
+                  "description": "Global anchors shown across all tabs.",
+                  "items": { "$ref": "#/definitions/anchor" }
+                }
+              },
+              "additionalProperties": false
+            },
+            "openapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default OpenAPI source inherited by tabs/groups/pages in this navigation section."
+            },
+            "asyncapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default AsyncAPI source inherited by tabs/groups/pages in this navigation section."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": ["dropdowns"],
+          "properties": {
+            "dropdowns": {
+              "type": "array",
+              "description": "Top-level dropdown containers. Each dropdown can include groups, pages, anchors, or links.",
+              "items": { "$ref": "#/definitions/dropdown" },
+              "minItems": 1
+            },
+            "global": {
+              "type": "object",
+              "description": "Cross-cutting navigation elements visible on every page.",
+              "properties": {
+                "tabs": {
+                  "type": "array",
+                  "description": "Global external tabs shown across all pages.",
+                  "items": { "$ref": "#/definitions/globalTab" }
+                },
+                "anchors": {
+                  "type": "array",
+                  "description": "Global anchors shown across all tabs.",
+                  "items": { "$ref": "#/definitions/anchor" }
+                }
+              },
+              "additionalProperties": false
+            },
+            "openapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default OpenAPI source inherited by tabs/groups/pages in this navigation section."
+            },
+            "asyncapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default AsyncAPI source inherited by tabs/groups/pages in this navigation section."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": ["languages"],
+          "properties": {
+            "languages": {
+              "type": "array",
+              "description": "Per-language navigation. Each entry defines tabs/groups/pages for one language. First entry is the default language (no URL prefix).",
+              "items": { "$ref": "#/definitions/languageNav" },
+              "minItems": 1
+            },
+            "global": {
+              "type": "object",
+              "description": "Cross-cutting navigation elements visible on every page.",
+              "properties": {
+                "tabs": {
+                  "type": "array",
+                  "description": "Global external tabs shown across all pages.",
+                  "items": { "$ref": "#/definitions/globalTab" }
+                },
+                "anchors": {
+                  "type": "array",
+                  "description": "Global anchors shown across all tabs.",
+                  "items": { "$ref": "#/definitions/anchor" }
+                }
+              },
+              "additionalProperties": false
+            },
+            "openapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default OpenAPI source inherited by tabs/groups/pages in this navigation section."
+            },
+            "asyncapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default AsyncAPI source inherited by tabs/groups/pages in this navigation section."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": ["products"],
+          "properties": {
+            "products": {
+              "type": "array",
+              "description": "Multi-product navigation. Each product can define its own tabs or top-level pages.",
+              "items": { "$ref": "#/definitions/productNav" },
+              "minItems": 1
+            },
+            "global": {
+              "type": "object",
+              "description": "Cross-cutting navigation elements visible on every page.",
+              "properties": {
+                "tabs": {
+                  "type": "array",
+                  "description": "Global external tabs shown across all pages.",
+                  "items": { "$ref": "#/definitions/globalTab" }
+                },
+                "anchors": {
+                  "type": "array",
+                  "description": "Global anchors shown across all tabs.",
+                  "items": { "$ref": "#/definitions/anchor" }
+                }
+              },
+              "additionalProperties": false
+            },
+            "openapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default OpenAPI source inherited by tabs/groups/pages in this navigation section."
+            },
+            "asyncapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default AsyncAPI source inherited by tabs/groups/pages in this navigation section."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": ["versions"],
+          "properties": {
+            "versions": {
+              "type": "array",
+              "description": "Versioned navigation. Each version defines its own set of tabs.",
+              "items": { "$ref": "#/definitions/versionNav" },
+              "minItems": 1
+            },
+            "global": {
+              "type": "object",
+              "description": "Cross-cutting navigation elements visible on every page.",
+              "properties": {
+                "tabs": {
+                  "type": "array",
+                  "description": "Global external tabs shown across all pages.",
+                  "items": { "$ref": "#/definitions/globalTab" }
+                },
+                "anchors": {
+                  "type": "array",
+                  "description": "Global anchors shown across all tabs.",
+                  "items": { "$ref": "#/definitions/anchor" }
+                }
+              },
+              "additionalProperties": false
+            },
+            "openapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default OpenAPI source inherited by tabs/groups/pages in this navigation section."
+            },
+            "asyncapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default AsyncAPI source inherited by tabs/groups/pages in this navigation section."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": ["anchors"],
+          "properties": {
+            "anchors": {
+              "type": "array",
+              "description": "Prominent external links displayed in the navbar (e.g. GitHub, Discord).",
+              "items": { "$ref": "#/definitions/anchor" }
+            },
+            "global": {
+              "type": "object",
+              "description": "Cross-cutting navigation elements visible on every page.",
+              "properties": {
+                "tabs": {
+                  "type": "array",
+                  "description": "Global external tabs shown across all pages.",
+                  "items": { "$ref": "#/definitions/globalTab" }
+                },
+                "anchors": {
+                  "type": "array",
+                  "description": "Global anchors shown across all tabs.",
+                  "items": { "$ref": "#/definitions/anchor" }
+                }
+              },
+              "additionalProperties": false
+            },
+            "openapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default OpenAPI source inherited by tabs/groups/pages in this navigation section."
+            },
+            "asyncapi": {
+              "$ref": "#/definitions/openapiSource",
+              "description": "Default AsyncAPI source inherited by tabs/groups/pages in this navigation section."
+            }
+          },
+          "additionalProperties": false
         }
-      },
-      "anyOf": [
-        {
-          "required": [
-            "tabs"
-          ]
-        },
-        {
-          "required": [
-            "dropdowns"
-          ]
-        },
-        {
-          "required": [
-            "groups"
-          ]
-        },
-        {
-          "required": [
-            "pages"
-          ]
-        },
-        {
-          "required": [
-            "languages"
-          ]
-        },
-        {
-          "required": [
-            "products"
-          ]
-        },
-        {
-          "required": [
-            "versions"
-          ]
-        },
-        {
-          "required": [
-            "anchors"
-          ]
-        }
-      ],
-      "additionalProperties": false
+      ]
     },
     "asyncapi": {
       "$ref": "#/definitions/openapiSource",
@@ -438,6 +658,23 @@
   },
   "additionalProperties": false,
   "definitions": {
+    "footerSocials": {
+      "type": "object",
+      "description": "Map of social network keys to URLs (for example {\"x\":\"https://x.com/org\",\"github\":\"https://github.com/org\"}).",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "footerConfig": {
+      "type": "object",
+      "properties": {
+        "socials": {
+          "$ref": "#/definitions/footerSocials"
+        }
+      },
+      "additionalProperties": false
+    },
     "themeAsset": {
       "description": "Theme-aware asset path. Supports a string or an object with light/dark variants.",
       "oneOf": [
@@ -512,6 +749,30 @@
         }
       },
       "additionalProperties": false
+    },
+    "metadataConfig": {
+      "type": "object",
+      "description": "Metadata configuration for documentation pages.",
+      "properties": {
+        "timestamp": {
+          "type": "boolean",
+          "description": "Show the last modified date on all docs pages.",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "variablesConfig": {
+      "type": "object",
+      "description": "Set of custom variables used throughout documentation and docs.json values.",
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9.-]+$",
+        "description": "Variable names can include letters, numbers, periods, and hyphens."
+      },
+      "additionalProperties": {
+        "type": "string",
+        "description": "Variable value."
+      }
     },
     "openapiSource": {
       "description": "OpenAPI source value. Supports a spec URL/path, a list of sources, or an object form.",

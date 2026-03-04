@@ -107,14 +107,49 @@ interface VeluSeoConfig {
   indexing?: 'navigable' | 'all' | string;
 }
 
+interface VeluMetadataConfig {
+  timestamp?: boolean;
+}
+
 interface VeluThemeAsset {
   light?: string;
   dark?: string;
   href?: string;
 }
 
+interface VeluFooterConfig {
+  socials?: Record<string, unknown> | VeluFooterSocialInput[];
+}
+
+interface VeluFooterSocialInput {
+  type?: string;
+  label?: string;
+  href?: string;
+  url?: string;
+  icon?: string;
+  iconType?: string;
+}
+
+export interface VeluFooterSocialLink {
+  key: string;
+  label: string;
+  href: string;
+  icon: string;
+  iconType?: string;
+}
+
 export interface VeluProductOption {
   product: string;
+  slug: string;
+  description?: string;
+  icon?: string;
+  iconType?: string;
+  tabSlugs: string[];
+  defaultPath: string;
+}
+
+export interface VeluDropdownOption {
+  dropdown: string;
   slug: string;
   description?: string;
   icon?: string;
@@ -131,8 +166,16 @@ export interface VeluVersionOption {
   defaultPath: string;
 }
 
+interface VeluContextualCustomOption {
+  title: string;
+  description?: string;
+  icon?: string;
+  href: string;
+}
+
 interface VeluConfig {
   name?: string;
+  description?: string;
   title?: string;
   favicon?: string | VeluThemeAsset;
   logo?: string | VeluThemeAsset;
@@ -150,6 +193,13 @@ interface VeluConfig {
   asyncapi?: string | string[] | Record<string, unknown>;
   api?: VeluApiConfig;
   seo?: VeluSeoConfig;
+  metadata?: VeluMetadataConfig;
+  footer?: VeluFooterConfig;
+  footerSocials?: Record<string, unknown> | VeluFooterSocialInput[];
+  banner?: { content?: string; dismissible?: boolean };
+  contextual?: {
+    options?: Array<string | VeluContextualCustomOption>;
+  };
   navigation: {
     tabs?: VeluTab[];
     languages?: VeluLanguageNav[];
@@ -243,6 +293,41 @@ function findFirstPageInTab(tab: VeluTab): string | undefined {
   return undefined;
 }
 
+function findFirstRouteInGroup(group: VeluGroup, tabSlug: string, parentGroupSlugs: string[] = []): string | undefined {
+  const nextGroupSlugs = group.slug ? [...parentGroupSlugs, group.slug] : parentGroupSlugs;
+
+  for (const item of group.pages) {
+    if (typeof item === 'string') {
+      return `/${[tabSlug, ...nextGroupSlugs, pageBasename(item)].filter(Boolean).join('/')}`;
+    }
+    if (isGroup(item)) {
+      const nested = findFirstRouteInGroup(item, tabSlug, nextGroupSlugs);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}
+
+function resolveFirstRouteInTab(tab: VeluTab): string | undefined {
+  if (!tab.slug) return undefined;
+
+  if (tab.pages) {
+    for (const item of tab.pages) {
+      if (typeof item === 'string') return `/${tab.slug}/${pageBasename(item)}`;
+    }
+  }
+
+  if (tab.groups) {
+    for (const group of tab.groups) {
+      const nested = findFirstRouteInGroup(group, tab.slug);
+      if (nested) return nested;
+    }
+  }
+
+  if (typeof tab.href === 'string' && tab.href.trim().length > 0) return tab.href.trim();
+  return `/${tab.slug}`;
+}
+
 function parseVersionParts(version: string): number[] {
   const parts = version.match(/\d+/g);
   return parts ? parts.map((n) => Number(n)) : [];
@@ -256,6 +341,109 @@ function compareVersionParts(a: number[], b: number[]): number {
     if (av !== bv) return av - bv;
   }
   return 0;
+}
+
+const FOOTER_SOCIAL_PRESETS: Record<string, { label: string; icon: string }> = {
+  x: { label: 'X', icon: 'x-twitter' },
+  twitter: { label: 'X', icon: 'x-twitter' },
+  github: { label: 'GitHub', icon: 'github' },
+  gitlab: { label: 'GitLab', icon: 'gitlab' },
+  linkedin: { label: 'LinkedIn', icon: 'linkedin' },
+  discord: { label: 'Discord', icon: 'discord' },
+  youtube: { label: 'YouTube', icon: 'youtube' },
+  facebook: { label: 'Facebook', icon: 'facebook' },
+  instagram: { label: 'Instagram', icon: 'instagram' },
+  slack: { label: 'Slack', icon: 'slack' },
+  medium: { label: 'Medium', icon: 'medium' },
+  reddit: { label: 'Reddit', icon: 'reddit' },
+};
+
+function normalizeSocialKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s_]+/g, '-');
+}
+
+function titleCaseWords(value: string): string {
+  const normalized = value.trim().replace(/[_-]+/g, ' ');
+  if (!normalized) return 'Social';
+  return normalized
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function trimString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizeFooterSocialMap(value: unknown): VeluFooterSocialLink[] {
+  if (!isRecord(value)) return [];
+  const links: VeluFooterSocialLink[] = [];
+  for (const [rawKey, rawHref] of Object.entries(value)) {
+    const href = trimString(rawHref);
+    if (!href) continue;
+    const key = normalizeSocialKey(rawKey);
+    if (!key) continue;
+    const preset = FOOTER_SOCIAL_PRESETS[key];
+    links.push({
+      key,
+      href,
+      label: preset?.label ?? titleCaseWords(key),
+      icon: preset?.icon ?? key,
+      iconType: 'brands',
+    });
+  }
+  return links;
+}
+
+function normalizeFooterSocialList(value: unknown): VeluFooterSocialLink[] {
+  if (!Array.isArray(value)) return [];
+  const links: VeluFooterSocialLink[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const href = trimString(entry.href) ?? trimString(entry.url);
+    if (!href) continue;
+    const key = normalizeSocialKey(
+      trimString(entry.type) ?? trimString(entry.icon) ?? trimString(entry.label) ?? 'social',
+    );
+    const preset = FOOTER_SOCIAL_PRESETS[key];
+    links.push({
+      key,
+      href,
+      label: trimString(entry.label) ?? preset?.label ?? titleCaseWords(key),
+      icon: trimString(entry.icon) ?? preset?.icon ?? key,
+      iconType: trimString(entry.iconType) ?? 'brands',
+    });
+  }
+  return links;
+}
+
+function dedupeFooterSocialLinks(links: VeluFooterSocialLink[]): VeluFooterSocialLink[] {
+  const seen = new Set<string>();
+  const unique: VeluFooterSocialLink[] = [];
+  for (const link of links) {
+    const dedupeKey = `${link.href}::${link.icon}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    unique.push(link);
+  }
+  return unique;
+}
+
+export interface VeluBannerConfig {
+  content: string;
+  dismissible: boolean;
+}
+
+export function getBannerConfig(): VeluBannerConfig | null {
+  const config = loadVeluConfig();
+  const banner = config.banner;
+  if (!banner) return null;
+  const content = typeof banner.content === 'string' ? banner.content.trim() : '';
+  if (!content) return null;
+  return { content, dismissible: banner.dismissible === true };
 }
 
 export function getExternalTabs(): Array<{ label: string; href: string }> {
@@ -292,6 +480,14 @@ export function getGlobalAnchors(): VeluAnchor[] {
   return (config.navigation.global?.anchors ?? []).filter(
     (a): a is VeluAnchor & { href: string } => typeof a.href === 'string' && a.href.length > 0 && !a.hidden
   );
+}
+
+export function getFooterSocials(): VeluFooterSocialLink[] {
+  const config = loadVeluConfig();
+  const source = config.footer?.socials ?? config.footerSocials;
+  const fromMap = normalizeFooterSocialMap(source);
+  const fromList = normalizeFooterSocialList(source);
+  return dedupeFooterSocialLinks([...fromMap, ...fromList]);
 }
 
 export interface VeluTabMenuDefinition {
@@ -355,6 +551,46 @@ export function getLanguages(): string[] {
     return config.navigation.languages.map((l) => l.language);
   }
   return config.languages ?? [];
+}
+
+export function getDropdownOptions(): VeluDropdownOption[] {
+  const raw = loadRawConfig();
+  const navigation = isRecord(raw.navigation) ? raw.navigation : {};
+  const dropdowns = Array.isArray(navigation.dropdowns) ? navigation.dropdowns : [];
+  if (dropdowns.length === 0) return [];
+
+  const allTabs = loadVeluConfig().navigation.tabs ?? [];
+  const out: VeluDropdownOption[] = [];
+
+  dropdowns.forEach((entry, index) => {
+    if (!isRecord(entry)) return;
+    const dropdown = trimString(entry.dropdown);
+    if (!dropdown) return;
+
+    const slug = slugify(trimString(entry.slug) ?? dropdown, `dropdown-${index + 1}`);
+    const scopedTabs = allTabs.filter((tab) => {
+      const tabSlug = tab.slug ?? '';
+      return tabSlug === slug || tabSlug.startsWith(`${slug}/`);
+    });
+    const firstTab = scopedTabs[0];
+    const firstRoute = firstTab ? resolveFirstRouteInTab(firstTab) : undefined;
+    const href = trimString(entry.href);
+    const defaultPath = withTrailingSlashPath(firstRoute ?? href ?? `/${slug}`);
+
+    out.push({
+      dropdown,
+      slug,
+      description: trimString(entry.description),
+      icon: trimString(entry.icon),
+      iconType: trimString(entry.iconType),
+      tabSlugs: scopedTabs
+        .map((tab) => tab.slug)
+        .filter((tabSlug): tabSlug is string => typeof tabSlug === 'string' && tabSlug.length > 0),
+      defaultPath,
+    });
+  });
+
+  return out;
 }
 
 export function getProductOptions(): VeluProductOption[] {
@@ -482,6 +718,10 @@ export interface VeluResolvedApiConfig {
 export interface VeluResolvedSeoConfig {
   metatags: Record<string, string>;
   indexing: 'navigable' | 'all';
+}
+
+export interface VeluResolvedMetadataConfig {
+  timestamp: boolean;
 }
 
 function normalizePlaygroundDisplay(api: VeluApiConfig | undefined): PlaygroundDisplayMode {
@@ -629,6 +869,13 @@ export function getSeoConfig(): VeluResolvedSeoConfig {
   };
 }
 
+export function getMetadataConfig(): VeluResolvedMetadataConfig {
+  const config = loadVeluConfig();
+  return {
+    timestamp: config.metadata?.timestamp === true,
+  };
+}
+
 export function getSiteName(): string {
   const config = loadVeluConfig();
   const fromName = normalizeAssetPath(config.name);
@@ -636,6 +883,11 @@ export function getSiteName(): string {
   const fromTitle = normalizeAssetPath(config.title);
   if (fromTitle) return fromTitle;
   return 'Velu Docs';
+}
+
+export function getSiteDescription(): string | undefined {
+  const config = loadVeluConfig();
+  return normalizeAssetPath(config.description);
 }
 
 export function getSiteFavicon(): string | undefined {
@@ -654,6 +906,51 @@ export function getSitePrimaryColor(): string | undefined {
   const colors = config.colors;
   if (!colors) return undefined;
   return normalizeAssetPath(colors.primary) ?? normalizeAssetPath(colors.light) ?? normalizeAssetPath(colors.dark);
+}
+
+export interface VeluContextualOption {
+  id: string;
+  title: string;
+  description: string;
+  href?: string;
+  type: 'builtin' | 'custom';
+}
+
+const CONTEXTUAL_PRESETS: Record<string, { title: string; description: string }> = {
+  copy: { title: 'Copy page', description: 'Copy page as Markdown for LLMs' },
+  view: { title: 'View as Markdown', description: 'View this page in Markdown format' },
+  chatgpt: { title: 'Open in ChatGPT', description: 'Ask questions about this page' },
+  claude: { title: 'Open in Claude', description: 'Ask questions about this page' },
+  perplexity: { title: 'Open in Perplexity', description: 'Ask questions about this page' },
+  grok: { title: 'Open in Grok', description: 'Ask questions about this page' },
+  mcp: { title: 'Copy MCP URL', description: 'Copy the MCP server URL' },
+  'add-mcp': { title: 'Copy MCP install command', description: 'Copy npx command to install MCP server' },
+  cursor: { title: 'Connect to Cursor', description: 'Install MCP Server on Cursor' },
+  vscode: { title: 'Connect to VS Code', description: 'Install MCP Server on VS Code' },
+};
+
+const DEFAULT_CONTEXTUAL_OPTIONS = ['copy', 'chatgpt', 'claude', 'add-mcp', 'cursor', 'vscode'];
+
+export function getContextualOptions(): VeluContextualOption[] {
+  const config = loadVeluConfig();
+  const raw = config.contextual?.options;
+
+  const ids = raw ?? DEFAULT_CONTEXTUAL_OPTIONS;
+
+  return ids.map((entry, index) => {
+    if (typeof entry === 'string') {
+      const preset = CONTEXTUAL_PRESETS[entry];
+      if (!preset) return null;
+      return { id: entry, title: preset.title, description: preset.description, type: 'builtin' as const };
+    }
+    return {
+      id: `custom-${index}`,
+      title: entry.title,
+      description: entry.description ?? '',
+      href: entry.href,
+      type: 'custom' as const,
+    };
+  }).filter((item): item is VeluContextualOption => item !== null);
 }
 
 export function getSiteOrigin(): string {

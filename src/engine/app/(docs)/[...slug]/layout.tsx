@@ -4,6 +4,7 @@ import type { LinkItemType } from 'fumadocs-ui/layouts/shared';
 import { baseOptions } from '@/lib/layout.shared';
 import { source } from '@/lib/source';
 import {
+  getDropdownOptions,
   getIconLibrary,
   getLanguages,
   getVersionOptions,
@@ -15,6 +16,7 @@ import {
 import { SidebarLinks } from '@/components/sidebar-links';
 import { ProductSwitcher } from '@/components/product-switcher';
 import { VeluIcon } from '@/components/icon';
+import { HeaderTabLink } from '@/components/header-tab-link';
 
 interface LayoutParams {
   slug?: string[];
@@ -271,6 +273,49 @@ function resolveMenuLinksForTab(
   return best;
 }
 
+function withPrefixedPath(url: string, prefix?: string): string {
+  const normalizedPrefix = (prefix ?? '').trim().replace(/^\/+|\/+$/g, '');
+  if (!normalizedPrefix) return url;
+  if (/^(https?:|mailto:|tel:|#)/i.test(url)) return url;
+
+  const hashIndex = url.indexOf('#');
+  const queryIndex = url.indexOf('?');
+  const endIndex = [hashIndex, queryIndex].filter((index) => index >= 0).sort((a, b) => a - b)[0] ?? url.length;
+  const path = url.slice(0, endIndex);
+  const suffix = url.slice(endIndex);
+  if (!path.startsWith('/')) return url;
+
+  const prefixed = path === '/'
+    ? `/${normalizedPrefix}`
+    : path.startsWith(`/${normalizedPrefix}/`) || path === `/${normalizedPrefix}`
+      ? path
+      : `/${normalizedPrefix}${path}`;
+
+  return `${prefixed}${suffix}`;
+}
+
+function resolveRequestPathPrefix(
+  slugInput: string[] | undefined,
+  tabs: Array<{ url: string }>,
+): string | undefined {
+  const slug = (slugInput ?? []).map((segment) => segment.trim().toLowerCase()).filter(Boolean);
+  if (slug.length < 2) return undefined;
+
+  const tabRoots = new Set(
+    tabs
+      .map((tab) => normalizePath(tab.url).split('/').filter(Boolean)[0] ?? '')
+      .map((segment) => segment.toLowerCase())
+      .filter((segment) => segment.length > 0),
+  );
+
+  const first = slug[0] ?? '';
+  const second = slug[1] ?? '';
+  if (!first || !second) return undefined;
+  if (tabRoots.has(first)) return undefined;
+  if (tabRoots.has(second)) return first;
+  return undefined;
+}
+
 function scopeTreeToTab<T extends { children?: unknown[] }>(
   tree: T,
   tabSlug?: string,
@@ -341,11 +386,30 @@ function scopeTreeToTab<T extends { children?: unknown[] }>(
   return { ...tree, children: scopedChildren } as T;
 }
 
+function flattenSingleRootFolder<T extends { children?: unknown[] }>(tree: T): T {
+  const topChildren = Array.isArray(tree.children) ? tree.children : [];
+  if (topChildren.length === 0) return tree;
+
+  const rootFolders = topChildren.filter((child) => {
+    const node = child as PageTreeFolderNode;
+    return node?.type === 'folder' && node.root === true;
+  }) as PageTreeFolderNode[];
+
+  if (rootFolders.length !== 1) return tree;
+  const rootFolder = rootFolders[0];
+  const rootChildren = Array.isArray(rootFolder.children) ? rootFolder.children : [];
+  if (rootChildren.length === 0) return tree;
+
+  const nonRootChildren = topChildren.filter((child) => child !== rootFolder);
+  return { ...tree, children: [...rootChildren, ...nonRootChildren] } as T;
+}
+
 export default async function SlugLayout({ children, params }: SlugLayoutProps) {
   const resolvedParams = await params;
   const locale = resolveLocale(resolvedParams.slug);
   const versions = getVersionOptions();
   const products = getProductOptions();
+  const dropdowns = getDropdownOptions();
   const iconLibrary = getIconLibrary();
   const currentVersion = resolveCurrentVersion(resolvedParams.slug, versions);
   const currentProduct = resolveCurrentProduct(resolvedParams.slug, products);
@@ -353,10 +417,25 @@ export default async function SlugLayout({ children, params }: SlugLayoutProps) 
   const activePrefix = currentVersion?.slug ?? currentProduct?.slug;
   const containerScopedTree = filterTreeBySlugPrefix(source.getPageTree(locale), activePrefix);
   const rawTree = scopeTreeToTab(containerScopedTree, currentTabSlug, containerSlug);
+  const activeTree = dropdowns.length > 0 ? flattenSingleRootFolder(rawTree) : rawTree;
   const navbarTabs = buildNavbarTabs(source.getPageTree(locale)) ?? [];
+  const requestPathPrefix = resolveRequestPathPrefix(resolvedParams.slug, navbarTabs);
   const tabMenuDefinitions = getTabMenuDefinitions();
-  const tree = renderIconsInTree(rawTree, iconLibrary);
+  const tree = renderIconsInTree(activeTree, iconLibrary);
   const base = baseOptions();
+  const dropdownTabs = dropdowns.map((dropdown) => ({
+    url: withTrailingSlashUrl(dropdown.defaultPath),
+    title: dropdown.dropdown,
+    description: dropdown.description,
+    icon: dropdown.icon ? (
+      <VeluIcon
+        name={dropdown.icon}
+        iconType={dropdown.iconType}
+        library={iconLibrary}
+        fallback={false}
+      />
+    ) : undefined,
+  }));
   const headerTabLinks: LinkItemType[] = navbarTabs
     .map((tab): LinkItemType | null => {
       const tabText = typeof tab.title === 'string' ? tab.title : '';
@@ -371,22 +450,27 @@ export default async function SlugLayout({ children, params }: SlugLayoutProps) 
         return {
           type: 'menu',
           text: tabText,
-          url: withTrailingSlashUrl(tab.url),
+          url: withTrailingSlashUrl(withPrefixedPath(tab.url, requestPathPrefix)),
           active: 'nested-url',
           secondary: false,
           items: menuLinks.map((item) => ({
             text: item.text,
-            url: withTrailingSlashUrl(item.url),
+            url: withTrailingSlashUrl(withPrefixedPath(item.url, requestPathPrefix)),
             active: 'nested-url',
           })),
         };
       }
 
       return {
-        text: tabText,
-        url: withTrailingSlashUrl(tab.url),
-        active: 'nested-url',
+        type: 'custom',
         secondary: false,
+        children: (
+          <HeaderTabLink
+            text={tabText}
+            href={withTrailingSlashUrl(withPrefixedPath(tab.url, requestPathPrefix))}
+            urls={Array.from(tab.urls).map((url) => withTrailingSlashUrl(withPrefixedPath(url, requestPathPrefix)))}
+          />
+        ),
       };
     })
     .filter((link): link is LinkItemType => link !== null);
@@ -395,12 +479,15 @@ export default async function SlugLayout({ children, params }: SlugLayoutProps) 
     <DocsLayout
       tree={tree}
       sidebar={{
+        tabs: dropdownTabs.length > 0 ? dropdownTabs : undefined,
         collapsible: true,
-        banner: products.length > 1 ? (
-          <div className="velu-sidebar-banner">
-            <ProductSwitcher products={products} iconLibrary={iconLibrary} />
-          </div>
-        ) : undefined,
+        banner: products.length > 1
+          ? (
+            <div className="velu-sidebar-banner">
+              <ProductSwitcher products={products} iconLibrary={iconLibrary} />
+            </div>
+          )
+          : undefined,
         footer: ({ className, children, ...props }: any) => (
           <div
             className={['velu-sidebar-footer-shell', className].filter(Boolean).join(' ')}
