@@ -39,7 +39,7 @@ function printHelp() {
     velu lint              Validate docs.json (or velu.json) and check referenced pages
     velu run [--port N]    Build site and start dev server (default: 4321)
     velu build             Build a deployable static site (SSG)
-    velu paths             Output all navigation paths and their source files as JSON
+    velu paths             Output navigation paths and source files as JSON (grouped by language)
 
   Options:
     --port <number>   Port for the dev server (default: 4321)
@@ -159,7 +159,7 @@ interface PathEntry {
 }
 
 async function paths(docsDir: string) {
-  const { collectPages } = await import("./validate.js");
+  const { collectPagesByLanguage } = await import("./validate.js");
   const { normalizeConfigNavigation } = await import("./navigation-normalize.js");
   const { readFileSync, existsSync } = await import("node:fs");
   const { join } = await import("node:path");
@@ -172,25 +172,32 @@ async function paths(docsDir: string) {
 
   const raw = JSON.parse(readFileSync(configPath, "utf-8"));
   const config = normalizeConfigNavigation(raw);
-  const pages = collectPages(config);
+  const pagesByLanguage = collectPagesByLanguage(config);
+  const groupedEntries: Record<string, PathEntry[]> = {};
+  const flatEntries: PathEntry[] = [];
 
-  const entries: PathEntry[] = pages.map((pagePath) => {
-    // Check for .mdx first, then .md
-    const mdxPath = join(docsDir, `${pagePath}.mdx`);
-    const mdPath = join(docsDir, `${pagePath}.md`);
+  for (const [language, pages] of Object.entries(pagesByLanguage)) {
+    const entries: PathEntry[] = pages.map((pagePath) => {
+      // Check for .mdx first, then .md
+      const mdxPath = join(docsDir, `${pagePath}.mdx`);
+      const mdPath = join(docsDir, `${pagePath}.md`);
 
-    if (existsSync(mdxPath)) {
-      return { path: pagePath, file: `${pagePath}.mdx` };
-    }
-    if (existsSync(mdPath)) {
-      return { path: pagePath, file: `${pagePath}.md` };
-    }
-    return { path: pagePath, file: null };
-  });
+      if (existsSync(mdxPath)) {
+        return { path: pagePath, file: `${pagePath}.mdx` };
+      }
+      if (existsSync(mdPath)) {
+        return { path: pagePath, file: `${pagePath}.md` };
+      }
+      return { path: pagePath, file: null };
+    });
+    groupedEntries[language] = entries;
+    flatEntries.push(...entries);
+  }
 
   const output = {
-    paths: entries,
-    count: entries.length,
+    pathsByLanguage: groupedEntries,
+    paths: flatEntries,
+    count: flatEntries.length,
   };
 
   console.log(JSON.stringify(output, null, 2));

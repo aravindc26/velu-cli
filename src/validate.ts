@@ -116,6 +116,7 @@ type VeluOpenApiSource = string | string[] | Record<string, unknown>;
 interface VeluConfig {
   $schema?: string;
   variables?: Record<string, string>;
+  languages?: string[];
   icons?: {
     library?: "fontawesome" | "lucide" | "tabler";
   };
@@ -262,6 +263,28 @@ function collectPages(config: VeluConfig): string[] {
   return collectPagesFromTabs(tabs);
 }
 
+function collectPagesByLanguage(config: VeluConfig): Record<string, string[]> {
+  const grouped: Record<string, string[]> = {};
+
+  if (config.navigation.languages && config.navigation.languages.length > 0) {
+    for (const lang of config.navigation.languages) {
+      grouped[lang.language] = collectPagesFromTabs(lang.tabs);
+    }
+    return grouped;
+  }
+
+  const basePages = collectPagesFromTabs(config.navigation.tabs ?? []);
+  if (config.languages && config.languages.length > 0) {
+    for (const lang of config.languages) {
+      grouped[lang] = [...basePages];
+    }
+    return grouped;
+  }
+
+  grouped.english = basePages;
+  return grouped;
+}
+
 function validateVeluConfig(docsDir: string, schemaPath: string): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
@@ -331,4 +354,4 @@ function validateVeluConfig(docsDir: string, schemaPath: string): { valid: boole
   return { valid: errors.length === 0, errors };
 }
 
-export { validateVeluConfig, collectPages, VeluConfig, VeluGroup, VeluTab, VeluSeparator, VeluLink, VeluAnchor };
+export { validateVeluConfig, collectPages, collectPagesByLanguage, VeluConfig, VeluGroup, VeluTab, VeluSeparator, VeluLink, VeluAnchor };
