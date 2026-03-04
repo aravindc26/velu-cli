@@ -224,10 +224,52 @@ function normalizePath(value: string): string {
   return value.replace(/^\/+|\/+$/g, '').toLowerCase();
 }
 
+function normalizeSidebarTabUrl(url: string): string {
+  const trimmed = url.trim();
+  if (trimmed.length <= 1) return trimmed;
+  return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
+}
+
 function basename(value: string): string {
   const normalized = normalizePath(value);
   const parts = normalized.split('/').filter(Boolean);
   return parts[parts.length - 1] ?? normalized;
+}
+
+function collectPageUrls(tree: unknown, out: Set<string> = new Set<string>()): Set<string> {
+  if (!tree || typeof tree !== 'object') return out;
+
+  const node = tree as {
+    type?: string;
+    url?: unknown;
+    external?: unknown;
+    index?: { url?: unknown };
+    children?: unknown[];
+  };
+
+  if (node.type === 'page' && node.external !== true && typeof node.url === 'string' && node.url.length > 0) {
+    out.add(normalizeSidebarTabUrl(node.url));
+  }
+
+  if (node.type === 'folder' && typeof node.index?.url === 'string' && node.index.url.length > 0) {
+    out.add(normalizeSidebarTabUrl(node.index.url));
+  }
+
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) collectPageUrls(child, out);
+  }
+
+  return out;
+}
+
+function doesUrlBelongToTab(url: string, tabSlug: string): boolean {
+  const normalizedUrl = normalizePath(url);
+  const normalizedTab = normalizePath(tabSlug);
+  if (!normalizedUrl || !normalizedTab) return false;
+  return normalizedUrl === normalizedTab
+    || normalizedUrl.startsWith(`${normalizedTab}/`)
+    || normalizedUrl.includes(`/${normalizedTab}/`)
+    || normalizedUrl.endsWith(`/${normalizedTab}`);
 }
 
 function resolveMenuTargetUrl(menuPages: string[], tabUrls: Set<string>): string | undefined {
@@ -407,6 +449,7 @@ function flattenSingleRootFolder<T extends { children?: unknown[] }>(tree: T): T
 export default async function SlugLayout({ children, params }: SlugLayoutProps) {
   const resolvedParams = await params;
   const locale = resolveLocale(resolvedParams.slug);
+  const localePageTree = source.getPageTree(locale);
   const versions = getVersionOptions();
   const products = getProductOptions();
   const dropdowns = getDropdownOptions();
@@ -415,27 +458,39 @@ export default async function SlugLayout({ children, params }: SlugLayoutProps) 
   const currentProduct = resolveCurrentProduct(resolvedParams.slug, products);
   const { containerSlug, tabSlug: currentTabSlug } = resolveTabContext(resolvedParams.slug);
   const activePrefix = currentVersion?.slug ?? currentProduct?.slug;
-  const containerScopedTree = filterTreeBySlugPrefix(source.getPageTree(locale), activePrefix);
+  const containerScopedTree = filterTreeBySlugPrefix(localePageTree, activePrefix);
   const rawTree = scopeTreeToTab(containerScopedTree, currentTabSlug, containerSlug);
   const activeTree = dropdowns.length > 0 ? flattenSingleRootFolder(rawTree) : rawTree;
-  const navbarTabs = buildNavbarTabs(source.getPageTree(locale)) ?? [];
+  const navbarTabs = buildNavbarTabs(localePageTree) ?? [];
+  const allPageUrls = collectPageUrls(localePageTree);
   const requestPathPrefix = resolveRequestPathPrefix(resolvedParams.slug, navbarTabs);
   const tabMenuDefinitions = getTabMenuDefinitions();
   const tree = renderIconsInTree(activeTree, iconLibrary);
   const base = baseOptions();
-  const dropdownTabs = dropdowns.map((dropdown) => ({
-    url: withTrailingSlashUrl(dropdown.defaultPath),
-    title: dropdown.dropdown,
-    description: dropdown.description,
-    icon: dropdown.icon ? (
-      <VeluIcon
-        name={dropdown.icon}
-        iconType={dropdown.iconType}
-        library={iconLibrary}
-        fallback={false}
-      />
-    ) : undefined,
-  }));
+  const dropdownTabs = dropdowns.map((dropdown) => {
+    const defaultUrl = withTrailingSlashUrl(dropdown.defaultPath);
+    const matchingUrls = Array.from(allPageUrls).filter((url) => (
+      doesUrlBelongToTab(url, dropdown.slug)
+      || dropdown.tabSlugs.some((tabSlug) => doesUrlBelongToTab(url, tabSlug))
+    ));
+    const urls = new Set<string>(matchingUrls);
+    urls.add(normalizeSidebarTabUrl(defaultUrl));
+
+    return {
+      url: defaultUrl,
+      urls,
+      title: dropdown.dropdown,
+      description: dropdown.description,
+      icon: dropdown.icon ? (
+        <VeluIcon
+          name={dropdown.icon}
+          iconType={dropdown.iconType}
+          library={iconLibrary}
+          fallback={false}
+        />
+      ) : undefined,
+    };
+  });
   const headerTabLinks: LinkItemType[] = navbarTabs
     .map((tab): LinkItemType | null => {
       const tabText = typeof tab.title === 'string' ? tab.title : '';
