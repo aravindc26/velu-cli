@@ -281,7 +281,7 @@ function collectPagesByLanguage(config: VeluConfig): Record<string, string[]> {
     return grouped;
   }
 
-  grouped.english = basePages;
+  grouped.en = basePages;
   return grouped;
 }
 
