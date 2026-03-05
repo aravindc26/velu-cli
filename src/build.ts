@@ -137,6 +137,9 @@ interface VeluRedirect {
 
 interface VeluConfig {
   $schema?: string;
+  name?: string;
+  title?: string;
+  description?: string;
   theme?: string;
   variables?: Record<string, string>;
   colors?: VeluColors;
@@ -612,6 +615,29 @@ function copyStaticAssets(docsDir: string, publicDir: string) {
   }
 
   walk(docsDir);
+}
+
+function resolveProjectName(config: VeluConfig): string {
+  const fromName = typeof config.name === "string" ? config.name.trim() : "";
+  if (fromName) return fromName;
+  const fromTitle = typeof config.title === "string" ? config.title.trim() : "";
+  if (fromTitle) return fromTitle;
+  return "Documentation";
+}
+
+function resolveProjectDescription(config: VeluConfig): string {
+  if (typeof config.description === "string") return config.description.trim();
+  return "";
+}
+
+function writeProjectConstFile(config: VeluConfig, outDir: string) {
+  const constPayload = {
+    name: resolveProjectName(config),
+    description: resolveProjectDescription(config),
+  };
+
+  const constPath = join(outDir, "public", "const.json");
+  writeFileSync(constPath, `${JSON.stringify(constPayload, null, 2)}\n`, "utf-8");
 }
 
 function toPosixPath(value: string): string {
@@ -1169,9 +1195,11 @@ function build(docsDir: string, outDir: string) {
   // ── 3b. Copy static assets from docs project into public/ ─────────────────
   copyStaticAssets(docsDir, join(outDir, "public"));
   writeRedirectArtifacts(config, outDir);
+  writeProjectConstFile(rawConfig, outDir);
   if ((config.redirects ?? []).length > 0) {
     console.log("↪️  Generated redirect artifacts");
   }
+  console.log("🧾 Generated const.json");
   console.log("🖼️  Copied static assets");
 
   // ── 4. Build content + metadata artifacts ────────────────────────────────
