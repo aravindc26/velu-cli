@@ -334,6 +334,24 @@ function collectMarkdownPaths(distDir: string): string[] {
   return Array.from(markdownPaths).sort((a, b) => a.localeCompare(b));
 }
 
+function addLlmsTextAliases(distDir: string): number {
+  const mappings: Array<{ source: string; target: string }> = [
+    { source: "llms-file", target: "llms.txt" },
+    { source: "llms-full-file", target: "llms-full.txt" },
+  ];
+
+  let added = 0;
+  for (const { source, target } of mappings) {
+    const sourcePath = join(distDir, source);
+    const targetPath = join(distDir, target);
+    if (!existsSync(sourcePath) || existsSync(targetPath)) continue;
+    copyFileSync(sourcePath, targetPath);
+    added += 1;
+  }
+
+  return added;
+}
+
 function addStaticRouteCompatibility(outDir: string) {
   const distDir = join(outDir, "dist");
   if (!existsSync(distDir)) return;
@@ -417,6 +435,11 @@ function addStaticRouteCompatibility(outDir: string) {
       writeFileSync(headersPath, mergedHeaders.replace(/\n{3,}/g, "\n\n").trimEnd() + "\n", "utf-8");
     }
     console.log(`📄 Added inline markdown headers for ${mdPaths.length} .md routes`);
+  }
+
+  const llmsAliasesAdded = addLlmsTextAliases(distDir);
+  if (llmsAliasesAdded > 0) {
+    console.log(`🤖 Added ${llmsAliasesAdded} llms text aliases (.txt)`);
   }
 
   console.log(`🔁 Added static compatibility for ${routes.length} routes (${aliasCount} .html aliases, ${redirectAdded} redirects)`);
