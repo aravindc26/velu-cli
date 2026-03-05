@@ -35,6 +35,7 @@ function printHelp() {
   velu — documentation site generator
 
   Usage:
+    velu version           Print Velu CLI version
     velu init              Scaffold a new docs project with example files
     velu lint              Validate docs.json (or velu.json) and check referenced pages
     velu run [--port N]    Build site and start dev server (default: 4321)
@@ -42,11 +43,30 @@ function printHelp() {
     velu paths             Output navigation paths and source files as JSON (grouped by language)
 
   Options:
+    --version         Show Velu CLI version
     --port <number>   Port for the dev server (default: 4321)
     --help            Show this help message
 
   Run lint/run/build/paths from a directory containing docs.json (or velu.json).
 `);
+}
+
+function getCliVersion(): string {
+  try {
+    const pkgPath = join(PACKAGE_ROOT, "package.json");
+    const raw = readFileSync(pkgPath, "utf-8");
+    const parsed = JSON.parse(raw) as { version?: unknown };
+    if (typeof parsed.version === "string" && parsed.version.trim().length > 0) {
+      return parsed.version.trim();
+    }
+  } catch {
+    // ignore and fallback
+  }
+  return "unknown";
+}
+
+function printVersion() {
+  console.log(getCliVersion());
 }
 
 // ── init ────────────────────────────────────────────────────────────────────────
@@ -492,6 +512,11 @@ const command = args[0];
 
 if (!command || command === "--help" || command === "-h") {
   printHelp();
+  process.exit(0);
+}
+
+if (command === "version" || command === "--version" || command === "-v") {
+  printVersion();
   process.exit(0);
 }
 

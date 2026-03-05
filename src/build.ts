@@ -11,6 +11,7 @@ const __dirname = dirname(__filename);
 const PACKAGED_ENGINE_DIR = join(__dirname, "engine");
 const DEV_ENGINE_DIR = join(__dirname, "..", "src", "engine");
 const ENGINE_DIR = existsSync(DEV_ENGINE_DIR) ? DEV_ENGINE_DIR : PACKAGED_ENGINE_DIR;
+const CLI_PACKAGE_JSON_PATH = join(__dirname, "..", "package.json");
 const PRIMARY_CONFIG_NAME = "docs.json";
 const LEGACY_CONFIG_NAME = "velu.json";
 const SOURCE_MIRROR_DIR = "velu-imports";
@@ -630,10 +631,24 @@ function resolveProjectDescription(config: VeluConfig): string {
   return "";
 }
 
+function resolveCliVersion(): string {
+  try {
+    const raw = readFileSync(CLI_PACKAGE_JSON_PATH, "utf-8");
+    const parsed = JSON.parse(raw) as { version?: unknown };
+    if (typeof parsed.version === "string" && parsed.version.trim().length > 0) {
+      return parsed.version.trim();
+    }
+  } catch {
+    // ignore and fallback
+  }
+  return "unknown";
+}
+
 function writeProjectConstFile(config: VeluConfig, outDir: string) {
   const constPayload = {
     name: resolveProjectName(config),
     description: resolveProjectDescription(config),
+    version: resolveCliVersion(),
   };
 
   const constPath = join(outDir, "public", "const.json");
