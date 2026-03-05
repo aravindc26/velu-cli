@@ -2,6 +2,7 @@
 
 import { useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { ThumbsDown, ThumbsUp } from 'lucide-react';
+import { submitPublicFeedback } from '@/components/page-feedback-api';
 
 type Vote = 'yes' | 'no';
 
@@ -26,10 +27,13 @@ export function PageFeedback() {
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [details, setDetails] = useState('');
   const [email, setEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
 
   const showForm = vote !== null;
   const options = vote === 'yes' ? YES_OPTIONS : NO_OPTIONS;
   const showOptionalInputs = selectedReason === 'Something else';
+  const canSubmit = vote !== null && selectedReason.trim().length > 0 && !isSubmitting;
 
   const onChooseVote = (value: Vote) => {
     if (vote === value) return;
@@ -37,6 +41,7 @@ export function PageFeedback() {
     setSelectedReason('');
     setDetails('');
     setEmail('');
+    setSubmitError(false);
   };
 
   const stopEvent = (event: ReactMouseEvent) => {
@@ -49,11 +54,32 @@ export function PageFeedback() {
     setSelectedReason('');
     setDetails('');
     setEmail('');
+    setIsSubmitting(false);
+    setSubmitError(false);
   };
 
-  const onSubmit = () => {
-    // Placeholder for analytics/reporting integration.
-    onCancel();
+  const onSubmit = async () => {
+    if (!vote || !selectedReason.trim() || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setSubmitError(false);
+
+    const result = await submitPublicFeedback({
+      helpful: vote === 'yes',
+      reasonText: selectedReason,
+      details: showOptionalInputs ? details : undefined,
+      email: showOptionalInputs ? email : undefined,
+      pageUrl: window.location.href,
+      siteHost: window.location.host,
+    });
+
+    if (result.ok) {
+      onCancel();
+      return;
+    }
+
+    setSubmitError(true);
+    setIsSubmitting(false);
   };
 
   return (
@@ -65,6 +91,7 @@ export function PageFeedback() {
             type="button"
             className={['velu-page-feedback-btn', vote === 'yes' ? 'is-active' : ''].filter(Boolean).join(' ')}
             aria-label="Mark page as helpful"
+            disabled={isSubmitting}
             onClick={(event) => {
               stopEvent(event);
               onChooseVote('yes');
@@ -77,6 +104,7 @@ export function PageFeedback() {
             type="button"
             className={['velu-page-feedback-btn', vote === 'no' ? 'is-active' : ''].filter(Boolean).join(' ')}
             aria-label="Mark page as not helpful"
+            disabled={isSubmitting}
             onClick={(event) => {
               stopEvent(event);
               onChooseVote('no');
@@ -103,10 +131,12 @@ export function PageFeedback() {
                   type="button"
                   role="radio"
                   aria-checked={checked}
+                  disabled={isSubmitting}
                   className={['velu-page-feedback-option', checked ? 'is-checked' : ''].filter(Boolean).join(' ')}
                   onClick={(event) => {
                     stopEvent(event);
                     setSelectedReason(option);
+                    setSubmitError(false);
                   }}
                 >
                   <span className="velu-page-feedback-radio" aria-hidden="true" />
@@ -123,6 +153,7 @@ export function PageFeedback() {
                 rows={3}
                 placeholder="(Optional) Could you share more about your experience?"
                 value={details}
+                disabled={isSubmitting}
                 onChange={(event) => setDetails(event.target.value)}
               />
               <input
@@ -130,6 +161,7 @@ export function PageFeedback() {
                 type="email"
                 placeholder="(Optional) Email"
                 value={email}
+                disabled={isSubmitting}
                 onChange={(event) => setEmail(event.target.value)}
               />
             </div>
@@ -139,6 +171,7 @@ export function PageFeedback() {
             <button
               type="button"
               className="velu-page-feedback-cancel"
+              disabled={isSubmitting}
               onClick={(event) => {
                 stopEvent(event);
                 onCancel();
@@ -149,9 +182,12 @@ export function PageFeedback() {
             <button
               type="button"
               className="velu-page-feedback-submit"
+              disabled={!canSubmit}
+              aria-busy={isSubmitting}
+              title={submitError ? 'Unable to submit feedback right now. Please try again.' : undefined}
               onClick={(event) => {
                 stopEvent(event);
-                onSubmit();
+                void onSubmit();
               }}
             >
               Submit feedback
