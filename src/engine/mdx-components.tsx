@@ -152,9 +152,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
       ...props
     }: any) => {
       const hasImage = Boolean(img || image);
-      const hasIcon = Boolean(icon);
-      // Mintlify-like default: icon cards are horizontal unless explicitly disabled.
-      const useHorizontal = typeof horizontal === 'boolean' ? horizontal : (hasIcon && !hasImage);
+      const useHorizontal = horizontal === true;
 
       return (
         <Card

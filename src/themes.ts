@@ -12,11 +12,24 @@ interface VeluStyling {
   };
 }
 
+interface VeluFontDef {
+  family: string;
+  weight?: number;
+  source?: string;
+  format?: "woff" | "woff2";
+}
+
+interface VeluFontsConfig {
+  heading?: VeluFontDef;
+  body?: VeluFontDef;
+}
+
 interface ThemeConfig {
   theme?: string;
   colors?: VeluColors;
   appearance?: "system" | "light" | "dark";
   styling?: VeluStyling;
+  fonts?: VeluFontsConfig;
 }
 
 const FUMADOCS_THEMES = [
@@ -159,6 +172,46 @@ function generateThemeCss(config: ThemeConfig): string {
     lines.push("html { color-scheme: dark; }");
   }
   lines.push("");
+
+  // Font configuration
+  if (config.fonts) {
+    const { heading, body } = config.fonts;
+    // @font-face declarations for custom sources
+    for (const def of [heading, body].filter(Boolean) as VeluFontDef[]) {
+      if (def.source) {
+        const fmt = def.format || (def.source.endsWith(".woff2") ? "woff2" : "woff");
+        lines.push(`@font-face {`);
+        lines.push(`  font-family: '${def.family}';`);
+        lines.push(`  src: url('${def.source}') format('${fmt}');`);
+        if (def.weight) lines.push(`  font-weight: ${def.weight};`);
+        lines.push(`  font-display: swap;`);
+        lines.push(`}`);
+        lines.push("");
+      }
+    }
+    // CSS variable overrides
+    const vars: string[] = [];
+    if (body) {
+      vars.push(`  --font-fd-sans: '${body.family}', ui-sans-serif, system-ui, sans-serif;`);
+    }
+    if (heading) {
+      vars.push(`  --velu-font-heading: '${heading.family}', ui-sans-serif, system-ui, sans-serif;`);
+    }
+    if (vars.length) {
+      lines.push(":root {");
+      lines.push(...vars);
+      lines.push("}");
+      lines.push("");
+    }
+    // Heading font-family rule
+    if (heading) {
+      lines.push("h1, h2, h3, h4, h5, h6 {");
+      lines.push(`  font-family: var(--velu-font-heading);`);
+      if (heading.weight) lines.push(`  font-weight: ${heading.weight};`);
+      lines.push("}");
+      lines.push("");
+    }
+  }
 
   return lines.join("\n");
 }

@@ -146,6 +146,7 @@ interface VeluConfig {
   colors?: VeluColors;
   appearance?: "system" | "light" | "dark";
   styling?: VeluStyling;
+  fonts?: { family: string; weight?: number; source?: string; format?: "woff" | "woff2" } | { heading?: { family: string; weight?: number; source?: string; format?: "woff" | "woff2" }; body?: { family: string; weight?: number; source?: string; format?: "woff" | "woff2" } };
   metadata?: {
     timestamp?: boolean;
   };
@@ -1370,11 +1371,23 @@ function build(docsDir: string, outDir: string) {
   console.log(`📄 Generated ${totalPages} pages + ${totalMeta} navigation meta files`);
 
   // ── 5. Generate theme CSS (dynamic — depends on user config) ─────────────
+  // Resolve fonts config into { heading?, body? } shape
+  const resolvedFonts = (() => {
+    const raw = config.fonts;
+    if (!raw) return undefined;
+    if ('family' in raw && typeof (raw as Record<string, unknown>).family === 'string') {
+      return { heading: raw as { family: string; weight?: number; source?: string; format?: "woff" | "woff2" }, body: raw as { family: string; weight?: number; source?: string; format?: "woff" | "woff2" } };
+    }
+    const obj = raw as { heading?: { family: string; weight?: number; source?: string; format?: "woff" | "woff2" }; body?: { family: string; weight?: number; source?: string; format?: "woff" | "woff2" } };
+    return (obj.heading || obj.body) ? obj : undefined;
+  })();
+
   const themeCss = generateThemeCss({
     theme: config.theme,
     colors: config.colors,
     appearance: config.appearance,
     styling: config.styling,
+    fonts: resolvedFonts,
   });
   writeFileSync(join(outDir, "app", "velu-theme.css"), themeCss, "utf-8");
   console.log(`🎨 Generated theme: ${resolveThemeName(config.theme)}`);

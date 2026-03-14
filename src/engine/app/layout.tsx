@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { getAppearance, getBannerConfig, getSeoConfig, getSiteDescription, getSiteFavicon, getSiteName, getSiteOrigin, getSitePrimaryColor } from '@/lib/velu';
+import { getAppearance, getBannerConfig, getFontsConfig, getSeoConfig, getSiteDescription, getSiteFavicon, getSiteName, getSiteOrigin, getSitePrimaryColor } from '@/lib/velu';
 import { Providers } from '@/components/providers';
 import { VeluAssistant } from '@/components/assistant';
 import { VeluBanner } from '@/components/banner';
@@ -24,6 +24,7 @@ const seo = getSeoConfig();
 const favicon = getSiteFavicon();
 const primaryColor = getSitePrimaryColor();
 const bannerConfig = getBannerConfig();
+const fontsConfig = getFontsConfig();
 const generatedDefaultSocialImage = '/og/index.svg';
 const defaultSocialImage = seo.metatags['og:image'] ?? seo.metatags['twitter:image'] ?? generatedDefaultSocialImage;
 const absoluteDefaultSocialImage = defaultSocialImage ? toAbsoluteUrl(siteOrigin, defaultSocialImage) : undefined;
@@ -79,6 +80,19 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="sitemap" type="application/xml" href={`${siteOrigin}/sitemap.xml`} />
+        {fontsConfig && (() => {
+          // Collect Google Fonts families that don't use a custom source
+          const families = new Set<string>();
+          for (const def of [fontsConfig.heading, fontsConfig.body]) {
+            if (def && !def.source) {
+              const weight = def.weight ? `:wght@${def.weight}` : ':wght@400;500;600;700';
+              families.add(`${def.family.replace(/ /g, '+')}${weight}`);
+            }
+          }
+          if (families.size === 0) return null;
+          const url = `https://fonts.googleapis.com/css2?${[...families].map(f => `family=${f}`).join('&')}&display=swap`;
+          return <link rel="stylesheet" href={url} />;
+        })()}
       </head>
       <body className="min-h-screen" suppressHydrationWarning>
         <Providers theme={theme}>

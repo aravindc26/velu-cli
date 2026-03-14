@@ -173,6 +173,18 @@ interface VeluContextualCustomOption {
   href: string;
 }
 
+interface VeluFontDef {
+  family: string;
+  weight?: number;
+  source?: string;
+  format?: 'woff' | 'woff2';
+}
+
+export interface VeluResolvedFonts {
+  heading?: VeluFontDef;
+  body?: VeluFontDef;
+}
+
 interface VeluConfig {
   name?: string;
   description?: string;
@@ -188,6 +200,7 @@ interface VeluConfig {
     library?: string;
   };
   appearance?: 'system' | 'light' | 'dark';
+  fonts?: VeluFontDef | { heading?: VeluFontDef; body?: VeluFontDef };
   languages?: string[];
   openapi?: string | string[] | Record<string, unknown>;
   asyncapi?: string | string[] | Record<string, unknown>;
@@ -690,6 +703,19 @@ export function getAppearance(): 'system' | 'light' | 'dark' {
 }
 
 export type VeluIconLibrary = 'fontawesome' | 'lucide' | 'tabler';
+
+export function getFontsConfig(): VeluResolvedFonts | null {
+  const raw = loadVeluConfig().fonts;
+  if (!raw) return null;
+  // Single font definition (has 'family') → apply to both heading and body
+  if ('family' in raw && typeof raw.family === 'string') {
+    return { heading: raw as VeluFontDef, body: raw as VeluFontDef };
+  }
+  // Separate heading/body
+  const obj = raw as { heading?: VeluFontDef; body?: VeluFontDef };
+  if (!obj.heading && !obj.body) return null;
+  return { heading: obj.heading, body: obj.body };
+}
 
 export function getIconLibrary(): VeluIconLibrary {
   const raw = loadVeluConfig().icons?.library;

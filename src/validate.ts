@@ -113,6 +113,13 @@ interface VeluVersionNav {
 
 type VeluOpenApiSource = string | string[] | Record<string, unknown>;
 
+interface VeluFontDefinition {
+  family: string;
+  weight?: number;
+  source?: string;
+  format?: "woff" | "woff2";
+}
+
 interface VeluConfig {
   $schema?: string;
   variables?: Record<string, string>;
@@ -124,6 +131,7 @@ interface VeluConfig {
   colors?: { primary?: string; light?: string; dark?: string };
   appearance?: "system" | "light" | "dark";
   styling?: { codeblocks?: { theme?: string | { light: string; dark: string } } };
+  fonts?: VeluFontDefinition | { heading?: VeluFontDefinition; body?: VeluFontDefinition };
   openapi?: VeluOpenApiSource;
   asyncapi?: VeluOpenApiSource;
   api?: {

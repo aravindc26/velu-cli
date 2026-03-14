@@ -92,6 +92,26 @@
       ],
       "default": "system"
     },
+    "fonts": {
+      "description": "Custom font configuration. Can be a single font definition (applied to both headings and body) or an object with separate heading and body font definitions.",
+      "oneOf": [
+        { "$ref": "#/definitions/fontDefinition" },
+        {
+          "type": "object",
+          "properties": {
+            "heading": {
+              "$ref": "#/definitions/fontDefinition",
+              "description": "Font used for headings (h1–h6)."
+            },
+            "body": {
+              "$ref": "#/definitions/fontDefinition",
+              "description": "Font used for body text."
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "icons": {
       "type": "object",
       "description": "Icon settings compatible with Mint-style configuration.",
@@ -658,6 +678,32 @@
   },
   "additionalProperties": false,
   "definitions": {
+    "fontDefinition": {
+      "type": "object",
+      "description": "A font definition with family name and optional weight, source URL, and format.",
+      "properties": {
+        "family": {
+          "type": "string",
+          "description": "The font family name, e.g. \"Inter\", \"Playfair Display\"."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The font weight, e.g. 400, 700. Variable font weights like 550 are supported."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "URL or path to a custom font file, e.g. /fonts/custom.woff2 or https://example.com/font.woff2."
+        },
+        "format": {
+          "type": "string",
+          "enum": ["woff", "woff2"],
+          "description": "The font file format when using a custom source."
+        }
+      },
+      "required": ["family"],
+      "additionalProperties": false
+    },
     "footerSocials": {
       "type": "object",
       "description": "Map of social network keys to URLs (for example {\"x\":\"https://x.com/org\",\"github\":\"https://github.com/org\"}).",
