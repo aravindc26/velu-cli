@@ -132,44 +132,6 @@
       ],
       "additionalProperties": false
     },
-    "styling": {
-      "type": "object",
-      "description": "Fine-grained styling options.",
-      "properties": {
-        "codeblocks": {
-          "type": "object",
-          "description": "Code block styling options.",
-          "properties": {
-            "theme": {
-              "description": "Shiki theme for syntax highlighting. Use a string for a single theme, or an object with light/dark keys.",
-              "oneOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "light": {
-                      "type": "string"
-                    },
-                    "dark": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "light",
-                    "dark"
-                  ],
-                  "additionalProperties": false
-                }
-              ]
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
     "languages": {
       "type": "array",
       "description": "Supported language codes (e.g. [\"en\", \"es\", \"ja\"]). The first is the default. Display labels are auto-derived.",

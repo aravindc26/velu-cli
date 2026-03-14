@@ -6,12 +6,6 @@ interface VeluColors {
   dark?: string;
 }
 
-interface VeluStyling {
-  codeblocks?: {
-    theme?: string | { light: string; dark: string };
-  };
-}
-
 interface VeluFontDef {
   family: string;
   weight?: number;
@@ -28,7 +22,6 @@ interface ThemeConfig {
   theme?: string;
   colors?: VeluColors;
   appearance?: "system" | "light" | "dark";
-  styling?: VeluStyling;
   fonts?: VeluFontsConfig;
 }
 
@@ -222,4 +215,4 @@ function getThemeNames(): string[] {
 
 const THEMES = [...FUMADOCS_THEMES];
 
-export { generateThemeCss, getThemeNames, resolveThemeName, THEMES, ThemeConfig, VeluColors, VeluStyling };
+export { generateThemeCss, getThemeNames, resolveThemeName, THEMES, ThemeConfig, VeluColors };

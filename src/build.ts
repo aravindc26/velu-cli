@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, copyFileSync, cpSync, existsSyn
 import { join, dirname, relative, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
-import { generateThemeCss, resolveThemeName, type VeluColors, type VeluStyling } from "./themes.js";
+import { generateThemeCss, resolveThemeName, type VeluColors } from "./themes.js";
 import { normalizeConfigNavigation } from "./navigation-normalize.js";
 
 // ── Engine directory (shipped with the CLI package) ──────────────────────────
@@ -145,7 +145,6 @@ interface VeluConfig {
   variables?: Record<string, string>;
   colors?: VeluColors;
   appearance?: "system" | "light" | "dark";
-  styling?: VeluStyling;
   fonts?: { family: string; weight?: number; source?: string; format?: "woff" | "woff2" } | { heading?: { family: string; weight?: number; source?: string; format?: "woff" | "woff2" }; body?: { family: string; weight?: number; source?: string; format?: "woff" | "woff2" } };
   metadata?: {
     timestamp?: boolean;
@@ -1386,7 +1385,6 @@ function build(docsDir: string, outDir: string) {
     theme: config.theme,
     colors: config.colors,
     appearance: config.appearance,
-    styling: config.styling,
     fonts: resolvedFonts,
   });
   writeFileSync(join(outDir, "app", "velu-theme.css"), themeCss, "utf-8");

@@ -130,7 +130,7 @@ interface VeluConfig {
   theme?: string;
   colors?: { primary?: string; light?: string; dark?: string };
   appearance?: "system" | "light" | "dark";
-  styling?: { codeblocks?: { theme?: string | { light: string; dark: string } } };
+
   fonts?: VeluFontDefinition | { heading?: VeluFontDefinition; body?: VeluFontDefinition };
   openapi?: VeluOpenApiSource;
   asyncapi?: VeluOpenApiSource;

@@ -65,7 +65,6 @@ export interface VeluConfig {
   theme?: string;
   colors?: { primary?: string; light?: string; dark?: string };
   appearance?: 'system' | 'light' | 'dark';
-  styling?: { codeblocks?: { theme?: string | { light: string; dark: string } } };
   navigation: {
     tabs?: VeluTab[];
     anchors?: VeluAnchor[];
