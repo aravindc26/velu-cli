@@ -1,5 +1,5 @@
 import { resolve, join, dirname, delimiter } from "node:path";
-import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, rmSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, rmSync, readFileSync, statSync, symlinkSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -230,6 +230,20 @@ async function generateProject(docsDir: string): Promise<string> {
   // Generate into the active docs project directory.
   const outDir = join(docsDir, ".velu-out");
   build(docsDir, outDir);
+
+  // Symlink the package's node_modules into the output directory so ESM imports
+  // (e.g. fumadocs-mdx in next.config.mjs) resolve correctly when building
+  // from a temp directory outside the package root.
+  const outNodeModules = join(outDir, "node_modules");
+  if (!existsSync(outNodeModules)) {
+    try {
+      symlinkSync(NODE_MODULES_PATH, outNodeModules, "junction");
+    } catch {
+      // Fall back to dir symlink on Linux if junction is unsupported
+      try { symlinkSync(NODE_MODULES_PATH, outNodeModules, "dir"); } catch {}
+    }
+  }
+
   return outDir;
 }
 
