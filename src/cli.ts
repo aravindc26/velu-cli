@@ -1,5 +1,5 @@
 import { resolve, join, dirname, delimiter } from "node:path";
-import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, rmSync, readFileSync, statSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, rmSync, readFileSync, statSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -230,23 +230,34 @@ async function generateProject(docsDir: string): Promise<string> {
   // Generate into the active docs project directory.
   const outDir = join(docsDir, ".velu-out");
   build(docsDir, outDir);
-
-  // Symlink the package's node_modules into the output directory so ESM imports
-  // (e.g. fumadocs-mdx in next.config.mjs) resolve correctly when building
-  // from a temp directory outside the package root.
-  const outNodeModules = join(outDir, "node_modules");
-  if (!existsSync(outNodeModules)) {
-    try {
-      symlinkSync(NODE_MODULES_PATH, outNodeModules, "junction");
-    } catch {
-      // Fall back to dir symlink on Linux if junction is unsupported
-      try { symlinkSync(NODE_MODULES_PATH, outNodeModules, "dir"); } catch {}
-    }
-  }
-
   return outDir;
 }
 
+function copyDirMerge(src: string, dest: string): void {
+  mkdirSync(dest, { recursive: true });
+  for (const entry of readdirSync(src)) {
+    const srcPath = join(src, entry);
+    const destPath = join(dest, entry);
+    if (statSync(srcPath).isDirectory()) {
+      copyDirMerge(srcPath, destPath);
+    } else {
+      copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
+function prepareRuntimeOutDir(docsOutDir: string): string {
+  const runtimeOutDir = join(PACKAGE_ROOT, ".velu-out");
+  if (resolve(docsOutDir) === resolve(runtimeOutDir)) return runtimeOutDir;
+
+  // Remove previous output — best effort
+  try { rmSync(runtimeOutDir, { recursive: true, force: true }); } catch {}
+
+  // Always use manual copy — cpSync throws EEXIST on Node 20 if the
+  // directory cannot be fully removed (permissions, concurrent builds).
+  copyDirMerge(docsOutDir, runtimeOutDir);
+  return runtimeOutDir;
+}
 
 async function buildStatic(outDir: string, docsDir: string) {
   await new Promise<void>((res, rej) => {
@@ -456,9 +467,17 @@ function addStaticRouteCompatibility(outDir: string) {
 
 async function buildSite(docsDir: string) {
   const docsOutDir = await generateProject(docsDir);
-  await buildStatic(docsOutDir, docsDir);
-  exportMarkdownRoutes(docsOutDir);
-  addStaticRouteCompatibility(docsOutDir);
+  const runtimeOutDir = prepareRuntimeOutDir(docsOutDir);
+  await buildStatic(runtimeOutDir, docsDir);
+  exportMarkdownRoutes(runtimeOutDir);
+  addStaticRouteCompatibility(runtimeOutDir);
+
+  if (resolve(docsOutDir) !== resolve(runtimeOutDir)) {
+    const docsDistDir = join(docsOutDir, "dist");
+    const runtimeDistDir = join(runtimeOutDir, "dist");
+    try { rmSync(docsDistDir, { recursive: true, force: true }); } catch {}
+    copyDirMerge(runtimeDistDir, docsDistDir);
+  }
 
   const staticOutDir = join(docsOutDir, "dist");
   console.log(`\n📁 Static site output: ${staticOutDir}`);
@@ -482,7 +501,8 @@ function spawnServer(outDir: string, command: string, port: number, docsDir: str
 
 async function run(docsDir: string, port: number) {
   const docsOutDir = await generateProject(docsDir);
-  spawnServer(docsOutDir, "dev", port, docsDir);
+  const runtimeOutDir = prepareRuntimeOutDir(docsOutDir);
+  spawnServer(runtimeOutDir, "dev", port, docsDir);
 }
 
 // ── Parse args ───────────────────────────────────────────────────────────────────
