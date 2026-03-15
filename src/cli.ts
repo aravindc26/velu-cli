@@ -273,13 +273,9 @@ function prepareRuntimeOutDir(docsOutDir: string): string {
     }
   }
 
-  if (existsSync(runtimeOutDir)) {
-    // cpSync fails with EEXIST when the destination directory exists (Node 20).
-    // Fall back to a manual recursive copy that handles existing directories.
-    copyDirMerge(docsOutDir, runtimeOutDir);
-  } else {
-    cpSync(docsOutDir, runtimeOutDir, { recursive: true, force: true });
-  }
+  // cpSync is unreliable on Node 20 (EEXIST even after successful rmSync).
+  // Always use manual recursive copy which handles existing directories.
+  copyDirMerge(docsOutDir, runtimeOutDir);
   return runtimeOutDir;
 }
 
