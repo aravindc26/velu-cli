@@ -1,5 +1,5 @@
 import { resolve, join, dirname, delimiter } from "node:path";
-import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, cpSync, rmSync, renameSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, rmSync, readFileSync, statSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -233,51 +233,6 @@ async function generateProject(docsDir: string): Promise<string> {
   return outDir;
 }
 
-function samePath(a: string, b: string): boolean {
-  return resolve(a).replace(/\\/g, "/").toLowerCase() === resolve(b).replace(/\\/g, "/").toLowerCase();
-}
-
-function copyDirMerge(src: string, dest: string): void {
-  mkdirSync(dest, { recursive: true });
-  for (const entry of readdirSync(src)) {
-    const srcPath = join(src, entry);
-    const destPath = join(dest, entry);
-    if (statSync(srcPath).isDirectory()) {
-      copyDirMerge(srcPath, destPath);
-    } else {
-      copyFileSync(srcPath, destPath);
-    }
-  }
-}
-
-function prepareRuntimeOutDir(docsOutDir: string): string {
-  const runtimeOutDir = join(PACKAGE_ROOT, ".velu-out");
-  if (samePath(docsOutDir, runtimeOutDir)) return runtimeOutDir;
-
-  try {
-    rmSync(runtimeOutDir, { recursive: true, force: true });
-  } catch {
-    // On Windows the directory may be locked by a previous dev-server process.
-    // Rename it aside so we can proceed; the stale copy is cleaned up later.
-    const stale = `${runtimeOutDir}-stale-${Date.now()}`;
-    try {
-      renameSync(runtimeOutDir, stale);
-      try { rmSync(stale, { recursive: true, force: true }); } catch {}
-    } catch {
-      // If even rename fails, clear contents so cpSync can work.
-      try {
-        for (const entry of readdirSync(runtimeOutDir)) {
-          rmSync(join(runtimeOutDir, entry), { recursive: true, force: true });
-        }
-      } catch {}
-    }
-  }
-
-  // cpSync is unreliable on Node 20 (EEXIST even after successful rmSync).
-  // Always use manual recursive copy which handles existing directories.
-  copyDirMerge(docsOutDir, runtimeOutDir);
-  return runtimeOutDir;
-}
 
 async function buildStatic(outDir: string, docsDir: string) {
   await new Promise<void>((res, rej) => {
@@ -487,17 +442,9 @@ function addStaticRouteCompatibility(outDir: string) {
 
 async function buildSite(docsDir: string) {
   const docsOutDir = await generateProject(docsDir);
-  const runtimeOutDir = prepareRuntimeOutDir(docsOutDir);
-  await buildStatic(runtimeOutDir, docsDir);
-  exportMarkdownRoutes(runtimeOutDir);
-  addStaticRouteCompatibility(runtimeOutDir);
-
-  if (!samePath(docsOutDir, runtimeOutDir)) {
-    const docsDistDir = join(docsOutDir, "dist");
-    const runtimeDistDir = join(runtimeOutDir, "dist");
-    rmSync(docsDistDir, { recursive: true, force: true });
-    cpSync(runtimeDistDir, docsDistDir, { recursive: true, force: true });
-  }
+  await buildStatic(docsOutDir, docsDir);
+  exportMarkdownRoutes(docsOutDir);
+  addStaticRouteCompatibility(docsOutDir);
 
   const staticOutDir = join(docsOutDir, "dist");
   console.log(`\n📁 Static site output: ${staticOutDir}`);
@@ -521,8 +468,7 @@ function spawnServer(outDir: string, command: string, port: number, docsDir: str
 
 async function run(docsDir: string, port: number) {
   const docsOutDir = await generateProject(docsDir);
-  const runtimeOutDir = prepareRuntimeOutDir(docsOutDir);
-  spawnServer(runtimeOutDir, "dev", port, docsDir);
+  spawnServer(docsOutDir, "dev", port, docsDir);
 }
 
 // ── Parse args ───────────────────────────────────────────────────────────────────
