@@ -1,5 +1,5 @@
 import { resolve, join, dirname, delimiter } from "node:path";
-import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, cpSync, rmSync, renameSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, cpSync, rmSync, renameSync, readFileSync, statSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -237,6 +237,19 @@ function samePath(a: string, b: string): boolean {
   return resolve(a).replace(/\\/g, "/").toLowerCase() === resolve(b).replace(/\\/g, "/").toLowerCase();
 }
 
+function copyDirMerge(src: string, dest: string): void {
+  mkdirSync(dest, { recursive: true });
+  for (const entry of readdirSync(src)) {
+    const srcPath = join(src, entry);
+    const destPath = join(dest, entry);
+    if (statSync(srcPath).isDirectory()) {
+      copyDirMerge(srcPath, destPath);
+    } else {
+      copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
 function prepareRuntimeOutDir(docsOutDir: string): string {
   const runtimeOutDir = join(PACKAGE_ROOT, ".velu-out");
   if (samePath(docsOutDir, runtimeOutDir)) return runtimeOutDir;
@@ -249,13 +262,24 @@ function prepareRuntimeOutDir(docsOutDir: string): string {
     const stale = `${runtimeOutDir}-stale-${Date.now()}`;
     try {
       renameSync(runtimeOutDir, stale);
-      // Best-effort async cleanup — ignore errors if still locked.
       try { rmSync(stale, { recursive: true, force: true }); } catch {}
     } catch {
-      // If even rename fails, try to overwrite in place.
+      // If even rename fails, clear contents so cpSync can work.
+      try {
+        for (const entry of readdirSync(runtimeOutDir)) {
+          rmSync(join(runtimeOutDir, entry), { recursive: true, force: true });
+        }
+      } catch {}
     }
   }
-  cpSync(docsOutDir, runtimeOutDir, { recursive: true, force: true });
+
+  if (existsSync(runtimeOutDir)) {
+    // cpSync fails with EEXIST when the destination directory exists (Node 20).
+    // Fall back to a manual recursive copy that handles existing directories.
+    copyDirMerge(docsOutDir, runtimeOutDir);
+  } else {
+    cpSync(docsOutDir, runtimeOutDir, { recursive: true, force: true });
+  }
   return runtimeOutDir;
 }
 
