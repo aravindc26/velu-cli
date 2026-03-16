@@ -1,7 +1,8 @@
 import { resolve, join, dirname, delimiter } from "node:path";
-import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, rmSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readdirSync, copyFileSync, rmSync, readFileSync, statSync, symlinkSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 
 const __filename = fileURLToPath(import.meta.url);
 const PACKAGE_ROOT = resolve(dirname(__filename), "..");
@@ -35,17 +36,21 @@ function printHelp() {
   velu — documentation site generator
 
   Usage:
-    velu version           Print Velu CLI version
-    velu init              Scaffold a new docs project with example files
-    velu lint              Validate docs.json (or velu.json) and check referenced pages
-    velu run [--port N]    Build site and start dev server (default: 4321)
-    velu build             Build a deployable static site (SSG)
-    velu paths             Output navigation paths and source files as JSON (grouped by language)
+    velu version                Print Velu CLI version
+    velu init                   Scaffold a new docs project with example files
+    velu lint                   Validate docs.json (or velu.json) and check referenced pages
+    velu run [--port N]         Build site and start dev server (default: 4321)
+    velu build                  Build a deployable static site (SSG)
+    velu paths                  Output navigation paths and source files as JSON (grouped by language)
+    velu preview-server [opts]  Start multi-tenant preview server (no docs.json needed)
 
   Options:
     --version         Show Velu CLI version
     --port <number>   Port for the dev server (default: 4321)
     --help            Show this help message
+
+  Preview server options:
+    --port <number>   Port for the preview server (default: 8080)
 
   Run lint/run/build/paths from a directory containing docs.json (or velu.json).
 `);
@@ -483,6 +488,86 @@ async function buildSite(docsDir: string) {
   console.log(`\n📁 Static site output: ${staticOutDir}`);
 }
 
+// ── preview-server ───────────────────────────────────────────────────────────────
+
+const PREVIEW_ENGINE_DIR = (() => {
+  const dev = join(PACKAGE_ROOT, "src", "preview-engine");
+  const packaged = join(dirname(__filename), "preview-engine");
+  return existsSync(dev) ? dev : packaged;
+})();
+
+function previewServerEnv(): NodeJS.ProcessEnv {
+  const existing = process.env.NODE_PATH || "";
+  return {
+    ...process.env,
+    NODE_PATH: existing ? `${NODE_MODULES_PATH}${delimiter}${existing}` : NODE_MODULES_PATH,
+  };
+}
+
+async function previewServer(port: number) {
+  const runtimeDir = join(tmpdir(), "velu-preview-out");
+
+  // Clean and copy preview engine to runtime dir
+  try { rmSync(runtimeDir, { recursive: true, force: true }); } catch {}
+  copyDirMerge(PREVIEW_ENGINE_DIR, runtimeDir);
+
+  // Symlink node_modules so Next.js can resolve dependencies (fumadocs-mdx, etc.)
+  const runtimeNodeModules = join(runtimeDir, "node_modules");
+  if (!existsSync(runtimeNodeModules)) {
+    symlinkSync(NODE_MODULES_PATH, runtimeNodeModules);
+  }
+
+  console.log(`  Starting preview server on port ${port}...`);
+  console.log(`  Preview content dir: ${process.env.PREVIEW_CONTENT_DIR || "(default)"}`);
+  console.log(`  Workspace dir: ${process.env.WORKSPACE_DIR || "(default)"}`);
+
+  // Resolve the next binary from the CLI's own node_modules
+  const nextBinPath = join(NODE_MODULES_PATH, "next", "dist", "bin", "next");
+
+  const child = spawn("node", [nextBinPath, "dev", "--port", String(port), "--turbopack"], {
+    cwd: runtimeDir,
+    stdio: ["inherit", "pipe", "inherit"],
+    env: {
+      ...previewServerEnv(),
+      WATCHPACK_POLLING: process.env.WATCHPACK_POLLING || "true",
+    },
+  });
+
+  // Pipe stdout through while watching for the "Ready" signal to trigger warmup
+  let warmedUp = false;
+  child.stdout?.on("data", (data: Buffer) => {
+    process.stdout.write(data);
+    if (!warmedUp && data.toString().includes("Ready")) {
+      warmedUp = true;
+      warmupRoutes(port);
+    }
+  });
+
+  const cleanup = () => child.kill("SIGTERM");
+  process.on("SIGINT", cleanup);
+  process.on("SIGTERM", cleanup);
+
+  // Wait for the child to exit — prevents the caller from reaching process.exit(0)
+  await new Promise<void>((res) => {
+    child.on("exit", (code) => {
+      process.exitCode = code ?? 0;
+      res();
+    });
+  });
+}
+
+/** Pre-warm key routes so Turbopack compiles them before real user requests. */
+function warmupRoutes(port: number) {
+  const routes = [
+    "/api/sessions/_warmup/init",   // compile API route
+    "/_warmup/docs/warmup",         // compile [sessionId]/[...slug] page route
+  ];
+  console.log("  Pre-warming routes...");
+  for (const route of routes) {
+    fetch(`http://localhost:${port}${route}`).catch(() => {});
+  }
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────────
 
 function spawnServer(outDir: string, command: string, port: number, docsDir: string) {
@@ -525,6 +610,19 @@ const docsDir = process.cwd();
 // init doesn't require docs.json
 if (command === "init") {
   init(docsDir);
+  process.exit(0);
+}
+
+// preview-server doesn't require docs.json
+if (command === "preview-server") {
+  const portIdx = args.indexOf("--port");
+  const port = portIdx !== -1 ? parseInt(args[portIdx + 1], 10) : 8080;
+  if (isNaN(port)) {
+    console.error("❌ Invalid port number.");
+    process.exit(1);
+  }
+  await previewServer(port);
+  // previewServer keeps running (child process), so we never reach here
   process.exit(0);
 }
 
