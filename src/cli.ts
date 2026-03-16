@@ -511,30 +511,37 @@ function previewServerEnv(): NodeJS.ProcessEnv {
 }
 
 async function previewServer(port: number) {
-  const runtimeDir = join(PACKAGE_ROOT, ".preview-out");
+  // Allow Docker to pre-populate the runtime dir via PREVIEW_RUNTIME_DIR
+  const runtimeDir = process.env.PREVIEW_RUNTIME_DIR || join(PACKAGE_ROOT, ".preview-out");
 
-  // Clean and copy MAIN ENGINE to runtime dir
-  try { rmSync(runtimeDir, { recursive: true, force: true }); } catch {}
-  copyDirMerge(PREVIEW_ENGINE_DIR, runtimeDir);
+  // Skip engine copy if the runtime dir is already set up (e.g. Docker pre-copy)
+  const runtimeAppDir = join(runtimeDir, "app");
+  if (existsSync(runtimeAppDir) && process.env.PREVIEW_RUNTIME_DIR) {
+    // Runtime dir already exists and was explicitly set — skip copy
+  } else {
+    // Clean and copy MAIN ENGINE to runtime dir
+    try { rmSync(runtimeDir, { recursive: true, force: true }); } catch {}
+    copyDirMerge(PREVIEW_ENGINE_DIR, runtimeDir);
 
-  // Copy engine-core for shared components, CSS, and plugins (@core/* imports)
-  copyDirMerge(ENGINE_CORE_DIR, join(runtimeDir, "engine-core"));
+    // Copy engine-core for shared components, CSS, and plugins (@core/* imports)
+    copyDirMerge(ENGINE_CORE_DIR, join(runtimeDir, "engine-core"));
+  }
 
-  // Activate preview routes: move _preview/* to app root
+  // Activate preview routes: move _preview/* to app root (idempotent — skips if already done)
   const appDir = join(runtimeDir, "app");
   const previewDir = join(appDir, "_preview");
 
-  // Remove production-only routes that don't apply to preview
-  for (const dir of ["(docs)", "sitemap.xml", "robots.txt", "og", "llms-file", "llms-full-file", "md-file", "rss-file", "_md"]) {
-    try { rmSync(join(appDir, dir), { recursive: true, force: true }); } catch {}
-  }
-  // Remove production root layout/page (preview has its own in _preview/)
-  for (const file of ["layout.tsx", "page.tsx"]) {
-    try { rmSync(join(appDir, file), { force: true }); } catch {}
-  }
-
-  // Move preview routes to app root
   if (existsSync(previewDir)) {
+    // Remove production-only routes that don't apply to preview
+    for (const dir of ["(docs)", "sitemap.xml", "robots.txt", "og", "llms-file", "llms-full-file", "md-file", "rss-file", "_md"]) {
+      try { rmSync(join(appDir, dir), { recursive: true, force: true }); } catch {}
+    }
+    // Remove production root layout/page (preview has its own in _preview/)
+    for (const file of ["layout.tsx", "page.tsx"]) {
+      try { rmSync(join(appDir, file), { force: true }); } catch {}
+    }
+
+    // Move preview routes to app root
     copyDirMerge(previewDir, appDir);
     rmSync(previewDir, { recursive: true, force: true });
   }

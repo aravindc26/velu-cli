@@ -22,19 +22,15 @@ const WORKSPACE_DIR = process.env.WORKSPACE_DIR || '/mnt/nfs_share/editor_sessio
 const PRIMARY_CONFIG_NAME = 'docs.json';
 const LEGACY_CONFIG_NAME = 'velu.json';
 
-const STATIC_EXTENSIONS = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico',
-  '.mp4', '.webm',
-  '.mp3', '.wav',
-  '.json', '.yaml', '.yml',
-  '.css',
-]);
-
 /**
- * Copy static assets (images, JSON specs, etc.) from workspace to public/
- * so that OpenAPI spec files and images are resolvable by components.
+ * Copy only spec files (JSON/YAML) from workspace to public/ so the
+ * OpenAPI component can resolve them. Images and other assets are served
+ * on-demand through the session assets API route, so we skip them here
+ * to keep session init fast.
  */
-function copyStaticAssets(docsDir: string): void {
+const SPEC_EXTENSIONS = new Set(['.json', '.yaml', '.yml']);
+
+function copySpecFiles(docsDir: string): void {
   const publicDir = resolve('public');
 
   function walk(dir: string): void {
@@ -49,7 +45,7 @@ function copyStaticAssets(docsDir: string): void {
         continue;
       }
       const ext = extname(entry.name).toLowerCase();
-      if (!STATIC_EXTENSIONS.has(ext)) continue;
+      if (!SPEC_EXTENSIONS.has(ext)) continue;
       const rel = relative(docsDir, srcPath);
       const destPath = join(publicDir, rel);
       mkdirSync(dirname(destPath), { recursive: true });
@@ -622,8 +618,8 @@ export function generateSessionContent(sessionId: string): {
   }
   mkdirSync(outputDir, { recursive: true });
 
-  // Copy static assets (images, OpenAPI specs, etc.) to public/ so components can resolve them
-  copyStaticAssets(workspaceDir);
+  // Copy spec files (JSON/YAML) to public/ so the OpenAPI component can resolve them
+  copySpecFiles(workspaceDir);
 
   const { config, variables } = loadConfig(workspaceDir);
   const navLanguages = config.navigation?.languages;
