@@ -1,14 +1,14 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
 import { createElement } from 'react';
 import { VersionSwitcher } from '@/components/version-switcher';
-import { getExternalTabs, getNavbarAnchors, getSiteLogoAsset, getSiteName, getVersionOptions } from '@/lib/velu';
+import { getExternalTabs, getNavbarAnchors, getSiteLogoAsset, getSiteName, getVersionOptions, type VeluConfigSource } from '@/lib/velu';
 
-export function baseOptions(): BaseLayoutProps {
-  const externalTabs = getExternalTabs();
-  const navAnchors = getNavbarAnchors();
-  const versions = getVersionOptions();
-  const siteName = getSiteName();
-  const logo = getSiteLogoAsset();
+export function baseOptions(src?: VeluConfigSource): BaseLayoutProps {
+  const externalTabs = getExternalTabs(src);
+  const navAnchors = getNavbarAnchors(src);
+  const versions = getVersionOptions(src);
+  const siteName = getSiteName(src);
+  const logo = getSiteLogoAsset(src);
   const lightLogo = logo.light ?? logo.dark;
   const darkLogo = logo.dark ?? logo.light;
   const logoHref = typeof logo.href === 'string' && logo.href.trim().length > 0 ? logo.href.trim() : '/';

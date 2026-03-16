@@ -5,9 +5,10 @@ import { Providers } from '@/components/providers';
 import { VeluAssistant } from '@/components/assistant';
 import { VeluBanner } from '@/components/banner';
 import './global.css';
-import './search.css';
-import './assistant.css';
-import './copy-page.css';
+import '@core/css/shared.css';
+import '@core/css/search.css';
+import '@core/css/assistant.css';
+import '@core/css/copy-page.css';
 
 function toAbsoluteUrl(origin: string, value: string): string {
   const trimmed = value.trim();

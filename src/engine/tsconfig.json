@@ -17,6 +17,7 @@
     "incremental": true,
     "paths": {
       "@/*": ["./*"],
+      "@core/*": ["../engine-core/*"],
       "fumadocs-mdx:collections/*": [".source/*"]
     },
     "plugins": [{ "name": "next" }]

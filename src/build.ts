@@ -11,6 +11,9 @@ const __dirname = dirname(__filename);
 const PACKAGED_ENGINE_DIR = join(__dirname, "engine");
 const DEV_ENGINE_DIR = join(__dirname, "..", "src", "engine");
 const ENGINE_DIR = existsSync(DEV_ENGINE_DIR) ? DEV_ENGINE_DIR : PACKAGED_ENGINE_DIR;
+const PACKAGED_ENGINE_CORE_DIR = join(__dirname, "engine-core");
+const DEV_ENGINE_CORE_DIR = join(__dirname, "..", "src", "engine-core");
+const ENGINE_CORE_DIR = existsSync(DEV_ENGINE_CORE_DIR) ? DEV_ENGINE_CORE_DIR : PACKAGED_ENGINE_CORE_DIR;
 const CLI_PACKAGE_JSON_PATH = join(__dirname, "..", "package.json");
 const PRIMARY_CONFIG_NAME = "docs.json";
 const LEGACY_CONFIG_NAME = "velu.json";
@@ -1193,6 +1196,16 @@ function build(docsDir: string, outDir: string) {
   cpSync(ENGINE_DIR, outDir, { recursive: true });
   // Remove legacy Astro template leftovers if present in the packaged engine.
   rmSync(join(outDir, "src"), { recursive: true, force: true });
+
+  // Copy engine-core for shared components, CSS, and plugins (@core/* imports)
+  cpSync(ENGINE_CORE_DIR, join(outDir, "engine-core"), { recursive: true });
+
+  // Patch tsconfig so @core/* resolves to the co-located engine-core copy
+  const outTsconfigPath = join(outDir, "tsconfig.json");
+  if (existsSync(outTsconfigPath)) {
+    const tsconfigContent = readFileSync(outTsconfigPath, "utf-8");
+    writeFileSync(outTsconfigPath, tsconfigContent.replace('"../engine-core/*"', '"./engine-core/*"'), "utf-8");
+  }
   console.log("📦 Copied engine files");
 
   // ── 2. Create additional directories ─────────────────────────────────────

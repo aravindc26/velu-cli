@@ -185,7 +185,22 @@ export interface VeluResolvedFonts {
   body?: VeluFontDef;
 }
 
-interface VeluConfig {
+export interface VeluConfigSource {
+  config: VeluConfig;
+  rawConfig: Record<string, unknown>;
+}
+
+export function loadConfigFromPath(configPath: string): VeluConfigSource {
+  const raw = readFileSync(configPath, 'utf-8');
+  const parsed = JSON.parse(raw);
+  const config = normalizeConfigNavigation(parsed) as VeluConfig;
+  const rawConfig = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? parsed as Record<string, unknown>
+    : {};
+  return { config, rawConfig };
+}
+
+export interface VeluConfig {
   name?: string;
   description?: string;
   title?: string;
@@ -232,6 +247,11 @@ let cachedRawConfig: Record<string, unknown> | null = null;
 function loadVeluConfig(): VeluConfig {
   if (cachedConfig) return cachedConfig;
   const configPath = resolveConfigPath(process.cwd());
+  if (!existsSync(configPath)) {
+    // Preview mode: no singleton config, return empty defaults
+    cachedConfig = {} as VeluConfig;
+    return cachedConfig;
+  }
   const raw = readFileSync(configPath, 'utf-8');
   cachedConfig = normalizeConfigNavigation(JSON.parse(raw)) as VeluConfig;
   return cachedConfig;
@@ -240,6 +260,10 @@ function loadVeluConfig(): VeluConfig {
 function loadRawConfig(): Record<string, unknown> {
   if (cachedRawConfig) return cachedRawConfig;
   const configPath = resolveConfigPath(process.cwd());
+  if (!existsSync(configPath)) {
+    cachedRawConfig = {};
+    return cachedRawConfig;
+  }
   const raw = readFileSync(configPath, 'utf-8');
   const parsed = JSON.parse(raw);
   cachedRawConfig = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
@@ -450,8 +474,8 @@ export interface VeluBannerConfig {
   dismissible: boolean;
 }
 
-export function getBannerConfig(): VeluBannerConfig | null {
-  const config = loadVeluConfig();
+export function getBannerConfig(src?: VeluConfigSource): VeluBannerConfig | null {
+  const config = src?.config ?? loadVeluConfig();
   const banner = config.banner;
   if (!banner) return null;
   const content = typeof banner.content === 'string' ? banner.content.trim() : '';
@@ -459,8 +483,8 @@ export function getBannerConfig(): VeluBannerConfig | null {
   return { content, dismissible: banner.dismissible === true };
 }
 
-export function getExternalTabs(): Array<{ label: string; href: string }> {
-  const config = loadVeluConfig();
+export function getExternalTabs(src?: VeluConfigSource): Array<{ label: string; href: string }> {
+  const config = src?.config ?? loadVeluConfig();
   const tabs = config.navigation?.tabs ?? [];
   const globalTabs = config.navigation?.global?.tabs ?? [];
 
@@ -481,22 +505,22 @@ export function getExternalTabs(): Array<{ label: string; href: string }> {
   return [...tabLinks, ...globalLinks];
 }
 
-export function getNavbarAnchors(): VeluAnchor[] {
-  const config = loadVeluConfig();
-  return (config.navigation.anchors ?? []).filter(
+export function getNavbarAnchors(src?: VeluConfigSource): VeluAnchor[] {
+  const config = src?.config ?? loadVeluConfig();
+  return (config.navigation?.anchors ?? []).filter(
     (a): a is VeluAnchor & { href: string } => typeof a.href === 'string' && a.href.length > 0 && !a.hidden
   );
 }
 
-export function getGlobalAnchors(): VeluAnchor[] {
-  const config = loadVeluConfig();
-  return (config.navigation.global?.anchors ?? []).filter(
+export function getGlobalAnchors(src?: VeluConfigSource): VeluAnchor[] {
+  const config = src?.config ?? loadVeluConfig();
+  return (config.navigation?.global?.anchors ?? []).filter(
     (a): a is VeluAnchor & { href: string } => typeof a.href === 'string' && a.href.length > 0 && !a.hidden
   );
 }
 
-export function getFooterSocials(): VeluFooterSocialLink[] {
-  const config = loadVeluConfig();
+export function getFooterSocials(src?: VeluConfigSource): VeluFooterSocialLink[] {
+  const config = src?.config ?? loadVeluConfig();
   const source = config.footer?.socials ?? config.footerSocials;
   const fromMap = normalizeFooterSocialMap(source);
   const fromList = normalizeFooterSocialList(source);
@@ -549,30 +573,30 @@ function collectTabMenus(section: unknown, out: VeluTabMenuDefinition[]): void {
   }
 }
 
-export function getTabMenuDefinitions(): VeluTabMenuDefinition[] {
-  const raw = loadRawConfig();
+export function getTabMenuDefinitions(src?: VeluConfigSource): VeluTabMenuDefinition[] {
+  const raw = src?.rawConfig ?? loadRawConfig();
   const navigation = isRecord(raw.navigation) ? raw.navigation : {};
   const out: VeluTabMenuDefinition[] = [];
   collectTabMenus(navigation, out);
   return out;
 }
 
-export function getLanguages(): string[] {
-  const config = loadVeluConfig();
+export function getLanguages(src?: VeluConfigSource): string[] {
+  const config = src?.config ?? loadVeluConfig();
   // Prefer navigation.languages codes, fall back to top-level languages
-  if (config.navigation.languages && config.navigation.languages.length > 0) {
+  if (config.navigation?.languages && config.navigation.languages.length > 0) {
     return config.navigation.languages.map((l) => l.language);
   }
   return config.languages ?? [];
 }
 
-export function getDropdownOptions(): VeluDropdownOption[] {
-  const raw = loadRawConfig();
+export function getDropdownOptions(src?: VeluConfigSource): VeluDropdownOption[] {
+  const raw = src?.rawConfig ?? loadRawConfig();
   const navigation = isRecord(raw.navigation) ? raw.navigation : {};
   const dropdowns = Array.isArray(navigation.dropdowns) ? navigation.dropdowns : [];
   if (dropdowns.length === 0) return [];
 
-  const allTabs = loadVeluConfig().navigation.tabs ?? [];
+  const allTabs = (src?.config ?? loadVeluConfig()).navigation.tabs ?? [];
   const out: VeluDropdownOption[] = [];
 
   dropdowns.forEach((entry, index) => {
@@ -606,12 +630,12 @@ export function getDropdownOptions(): VeluDropdownOption[] {
   return out;
 }
 
-export function getProductOptions(): VeluProductOption[] {
-  const config = loadVeluConfig();
-  const products = (config.navigation.products ?? []).filter((p) => !p.hidden);
+export function getProductOptions(src?: VeluConfigSource): VeluProductOption[] {
+  const config = src?.config ?? loadVeluConfig();
+  const products = (config.navigation?.products ?? []).filter((p) => !p.hidden);
   if (products.length === 0) return [];
 
-  const allTabs = config.navigation.tabs ?? [];
+  const allTabs = config.navigation?.tabs ?? [];
 
   return products.map((product, index) => {
     const prefix = slugify(product.product, `product-${index + 1}`);
@@ -642,12 +666,12 @@ export function getProductOptions(): VeluProductOption[] {
   });
 }
 
-export function getVersionOptions(): VeluVersionOption[] {
-  const config = loadVeluConfig();
-  const versions = (config.navigation.versions ?? []).filter((v) => !v.hidden);
+export function getVersionOptions(src?: VeluConfigSource): VeluVersionOption[] {
+  const config = src?.config ?? loadVeluConfig();
+  const versions = (config.navigation?.versions ?? []).filter((v) => !v.hidden);
   if (versions.length === 0) return [];
 
-  const allTabs = config.navigation.tabs ?? [];
+  const allTabs = config.navigation?.tabs ?? [];
 
   const baseEntries = versions.map((version, index) => {
     const prefix = slugify(version.version, `version-${index + 1}`);
@@ -696,16 +720,16 @@ export function getVersionOptions(): VeluVersionOption[] {
   }));
 }
 
-export function getAppearance(): 'system' | 'light' | 'dark' {
-  const appearance = loadVeluConfig().appearance;
+export function getAppearance(src?: VeluConfigSource): 'system' | 'light' | 'dark' {
+  const appearance = (src?.config ?? loadVeluConfig()).appearance;
   if (appearance === 'light' || appearance === 'dark') return appearance;
   return 'system';
 }
 
 export type VeluIconLibrary = 'fontawesome' | 'lucide' | 'tabler';
 
-export function getFontsConfig(): VeluResolvedFonts | null {
-  const raw = loadVeluConfig().fonts;
+export function getFontsConfig(src?: VeluConfigSource): VeluResolvedFonts | null {
+  const raw = (src?.config ?? loadVeluConfig()).fonts;
   if (!raw) return null;
   // Single font definition (has 'family') → apply to both heading and body
   if ('family' in raw && typeof raw.family === 'string') {
@@ -717,8 +741,8 @@ export function getFontsConfig(): VeluResolvedFonts | null {
   return { heading: obj.heading, body: obj.body };
 }
 
-export function getIconLibrary(): VeluIconLibrary {
-  const raw = loadVeluConfig().icons?.library;
+export function getIconLibrary(src?: VeluConfigSource): VeluIconLibrary {
+  const raw = (src?.config ?? loadVeluConfig()).icons?.library;
   if (raw === 'lucide' || raw === 'tabler' || raw === 'fontawesome') return raw;
   return 'fontawesome';
 }
@@ -857,8 +881,8 @@ function extractOrigin(value: string | undefined): string | undefined {
   }
 }
 
-export function getApiConfig(): VeluResolvedApiConfig {
-  const config = loadVeluConfig();
+export function getApiConfig(src?: VeluConfigSource): VeluResolvedApiConfig {
+  const config = src?.config ?? loadVeluConfig();
   const api = config.api;
   const auth = api?.mdx?.auth;
   const examples = api?.examples;
@@ -885,8 +909,8 @@ export function getApiConfig(): VeluResolvedApiConfig {
   };
 }
 
-export function getSeoConfig(): VeluResolvedSeoConfig {
-  const config = loadVeluConfig();
+export function getSeoConfig(src?: VeluConfigSource): VeluResolvedSeoConfig {
+  const config = src?.config ?? loadVeluConfig();
   const seo = config.seo;
   const indexing: 'navigable' | 'all' = seo?.indexing === 'all' ? 'all' : 'navigable';
   return {
@@ -895,15 +919,15 @@ export function getSeoConfig(): VeluResolvedSeoConfig {
   };
 }
 
-export function getMetadataConfig(): VeluResolvedMetadataConfig {
-  const config = loadVeluConfig();
+export function getMetadataConfig(src?: VeluConfigSource): VeluResolvedMetadataConfig {
+  const config = src?.config ?? loadVeluConfig();
   return {
     timestamp: config.metadata?.timestamp === true,
   };
 }
 
-export function getSiteName(): string {
-  const config = loadVeluConfig();
+export function getSiteName(src?: VeluConfigSource): string {
+  const config = src?.config ?? loadVeluConfig();
   const fromName = normalizeAssetPath(config.name);
   if (fromName) return fromName;
   const fromTitle = normalizeAssetPath(config.title);
@@ -911,24 +935,24 @@ export function getSiteName(): string {
   return 'Velu Docs';
 }
 
-export function getSiteDescription(): string | undefined {
-  const config = loadVeluConfig();
+export function getSiteDescription(src?: VeluConfigSource): string | undefined {
+  const config = src?.config ?? loadVeluConfig();
   return normalizeAssetPath(config.description);
 }
 
-export function getSiteFavicon(): string | undefined {
-  const config = loadVeluConfig();
+export function getSiteFavicon(src?: VeluConfigSource): string | undefined {
+  const config = src?.config ?? loadVeluConfig();
   const asset = normalizeThemeAsset(config.favicon);
   return asset.light ?? asset.dark;
 }
 
-export function getSiteLogoAsset(): VeluThemeAsset {
-  const config = loadVeluConfig();
+export function getSiteLogoAsset(src?: VeluConfigSource): VeluThemeAsset {
+  const config = src?.config ?? loadVeluConfig();
   return normalizeThemeAsset(config.logo);
 }
 
-export function getSitePrimaryColor(): string | undefined {
-  const config = loadVeluConfig();
+export function getSitePrimaryColor(src?: VeluConfigSource): string | undefined {
+  const config = src?.config ?? loadVeluConfig();
   const colors = config.colors;
   if (!colors) return undefined;
   return normalizeAssetPath(colors.primary) ?? normalizeAssetPath(colors.light) ?? normalizeAssetPath(colors.dark);
@@ -957,8 +981,8 @@ const CONTEXTUAL_PRESETS: Record<string, { title: string; description: string }>
 
 const DEFAULT_CONTEXTUAL_OPTIONS = ['copy', 'chatgpt', 'claude', 'add-mcp', 'cursor', 'vscode'];
 
-export function getContextualOptions(): VeluContextualOption[] {
-  const config = loadVeluConfig();
+export function getContextualOptions(src?: VeluConfigSource): VeluContextualOption[] {
+  const config = src?.config ?? loadVeluConfig();
   const raw = config.contextual?.options;
 
   const ids = raw ?? DEFAULT_CONTEXTUAL_OPTIONS;
@@ -988,8 +1012,8 @@ export function getContextualOptions(): VeluContextualOption[] {
   return options;
 }
 
-export function getSiteOrigin(): string {
-  const seo = getSeoConfig();
+export function getSiteOrigin(src?: VeluConfigSource): string {
+  const seo = getSeoConfig(src);
   const envCandidates = [
     process.env.VELU_SITE_URL,
     process.env.NEXT_PUBLIC_SITE_URL,

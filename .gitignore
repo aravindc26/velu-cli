@@ -1,5 +1,6 @@
 node_modules/
 .velu-out/
+.preview-out/
 docs/.velu-out/
 dist/
 *.tgz

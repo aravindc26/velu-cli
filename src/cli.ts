@@ -266,7 +266,7 @@ function prepareRuntimeOutDir(docsOutDir: string): string {
 
 async function buildStatic(outDir: string, docsDir: string) {
   await new Promise<void>((res, rej) => {
-    const child = spawn("node", ["_server.mjs", "build"], {
+    const child = spawn(process.execPath, ["_server.mjs", "build"], {
       cwd: outDir,
       stdio: "inherit",
       env: engineEnv(docsDir),
@@ -491,8 +491,14 @@ async function buildSite(docsDir: string) {
 // ── preview-server ───────────────────────────────────────────────────────────────
 
 const PREVIEW_ENGINE_DIR = (() => {
-  const dev = join(PACKAGE_ROOT, "src", "preview-engine");
-  const packaged = join(dirname(__filename), "preview-engine");
+  const dev = join(PACKAGE_ROOT, "src", "engine");
+  const packaged = join(dirname(__filename), "engine");
+  return existsSync(dev) ? dev : packaged;
+})();
+
+const ENGINE_CORE_DIR = (() => {
+  const dev = join(PACKAGE_ROOT, "src", "engine-core");
+  const packaged = join(dirname(__filename), "engine-core");
   return existsSync(dev) ? dev : packaged;
 })();
 
@@ -505,16 +511,50 @@ function previewServerEnv(): NodeJS.ProcessEnv {
 }
 
 async function previewServer(port: number) {
-  const runtimeDir = join(tmpdir(), "velu-preview-out");
+  const runtimeDir = join(PACKAGE_ROOT, ".preview-out");
 
-  // Clean and copy preview engine to runtime dir
+  // Clean and copy MAIN ENGINE to runtime dir
   try { rmSync(runtimeDir, { recursive: true, force: true }); } catch {}
   copyDirMerge(PREVIEW_ENGINE_DIR, runtimeDir);
 
-  // Symlink node_modules so Next.js can resolve dependencies (fumadocs-mdx, etc.)
+  // Copy engine-core for shared components, CSS, and plugins (@core/* imports)
+  copyDirMerge(ENGINE_CORE_DIR, join(runtimeDir, "engine-core"));
+
+  // Activate preview routes: move _preview/* to app root
+  const appDir = join(runtimeDir, "app");
+  const previewDir = join(appDir, "_preview");
+
+  // Remove production-only routes that don't apply to preview
+  for (const dir of ["(docs)", "sitemap.xml", "robots.txt", "og", "llms-file", "llms-full-file", "md-file", "rss-file", "_md"]) {
+    try { rmSync(join(appDir, dir), { recursive: true, force: true }); } catch {}
+  }
+  // Remove production root layout/page (preview has its own in _preview/)
+  for (const file of ["layout.tsx", "page.tsx"]) {
+    try { rmSync(join(appDir, file), { force: true }); } catch {}
+  }
+
+  // Move preview routes to app root
+  if (existsSync(previewDir)) {
+    copyDirMerge(previewDir, appDir);
+    rmSync(previewDir, { recursive: true, force: true });
+  }
+
+  // Create velu-theme.css that imports fumadocs neutral theme as baseline
+  // (per-session themes override via <style> tags injected in session layout)
+  writeFileSync(join(appDir, "velu-theme.css"), "@import 'fumadocs-ui/css/neutral.css';\n", "utf-8");
+
+  // Patch tsconfig so @core/* resolves to the co-located engine-core copy
+  const runtimeTsconfig = join(runtimeDir, "tsconfig.json");
+  if (existsSync(runtimeTsconfig)) {
+    const tsconfigContent = readFileSync(runtimeTsconfig, "utf-8");
+    writeFileSync(runtimeTsconfig, tsconfigContent.replace('"../engine-core/*"', '"./engine-core/*"'), "utf-8");
+  }
+
+  // Link node_modules so Next.js can resolve dependencies (fumadocs-mdx, etc.)
+  // Use 'junction' on Windows (no elevation required), symlink on other platforms
   const runtimeNodeModules = join(runtimeDir, "node_modules");
   if (!existsSync(runtimeNodeModules)) {
-    symlinkSync(NODE_MODULES_PATH, runtimeNodeModules);
+    symlinkSync(NODE_MODULES_PATH, runtimeNodeModules, "junction");
   }
 
   console.log(`  Starting preview server on port ${port}...`);
@@ -524,11 +564,13 @@ async function previewServer(port: number) {
   // Resolve the next binary from the CLI's own node_modules
   const nextBinPath = join(NODE_MODULES_PATH, "next", "dist", "bin", "next");
 
-  const child = spawn("node", [nextBinPath, "dev", "--port", String(port), "--turbopack"], {
+  const child = spawn(process.execPath, [nextBinPath, "dev", "--port", String(port), "--turbopack"], {
     cwd: runtimeDir,
     stdio: ["inherit", "pipe", "inherit"],
     env: {
       ...previewServerEnv(),
+      // Align source.config.ts and content-generator on the same content dir
+      PREVIEW_CONTENT_DIR: process.env.PREVIEW_CONTENT_DIR || "./content",
       WATCHPACK_POLLING: process.env.WATCHPACK_POLLING || "true",
     },
   });
@@ -571,7 +613,7 @@ function warmupRoutes(port: number) {
 // ── run ──────────────────────────────────────────────────────────────────────────
 
 function spawnServer(outDir: string, command: string, port: number, docsDir: string) {
-  const child = spawn("node", ["_server.mjs", command, "--port", String(port)], {
+  const child = spawn(process.execPath, ["_server.mjs", command, "--port", String(port)], {
     cwd: outDir,
     stdio: "inherit",
     env: engineEnv(docsDir),

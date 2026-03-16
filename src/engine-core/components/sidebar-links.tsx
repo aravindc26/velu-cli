@@ -1,7 +1,7 @@
-import { getGlobalAnchors, getIconLibrary, getLanguages, type VeluConfigSource, type VeluIconLibrary } from '@/lib/velu';
-import { ThemeToggle } from '@/components/theme-toggle';
-import { LanguageSwitcher } from '@/components/lang-switcher';
-import { VeluIcon } from '@/components/icon';
+import type { VeluAnchor, VeluIconLibrary } from '@core/types';
+import { ThemeToggle } from './theme-toggle';
+import { LanguageSwitcher } from './lang-switcher';
+import { VeluIcon } from './icon';
 
 function ExternalLinkIcon() {
   return (
@@ -9,16 +9,15 @@ function ExternalLinkIcon() {
   );
 }
 
-interface SidebarLinksProps {
-  anchors?: ReturnType<typeof getGlobalAnchors>;
-  iconLibrary?: VeluIconLibrary;
-  languages?: string[];
-}
-
-export function SidebarLinks(props: SidebarLinksProps) {
-  const anchors = props.anchors ?? getGlobalAnchors();
-  const languages = props.languages ?? getLanguages();
-  const iconLibrary = props.iconLibrary ?? getIconLibrary();
+export function SidebarLinks({
+  anchors,
+  languages,
+  iconLibrary,
+}: {
+  anchors: VeluAnchor[];
+  languages: string[];
+  iconLibrary: VeluIconLibrary;
+}) {
 
   return (
     <div className="velu-sidebar-footer">

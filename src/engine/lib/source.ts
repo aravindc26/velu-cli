@@ -1,100 +1,14 @@
 import { loader } from 'fumadocs-core/source';
-import { statusBadgesPlugin } from 'fumadocs-core/source/status-badges';
 import * as mdxCollections from 'fumadocs-mdx:collections/server';
-import { createElement } from 'react';
 import { getLanguages } from '@/lib/velu';
+import { openApiSidebarMethodBadgePlugin, createStatusBadgesPlugin } from '@core/lib/source-plugins';
 
 const languages = getLanguages();
 const defaultLanguage = languages[0] ?? 'en';
-const OPENAPI_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD', 'TRACE', 'WEBHOOK']);
 const docsCollection = (mdxCollections as { docs?: { toFumadocsSource?: () => unknown } }).docs;
 
 if (!docsCollection?.toFumadocsSource) {
   throw new Error('MDX collections are not ready yet. Please retry in a moment.');
-}
-
-function methodBadgeClass(method: string): string {
-  const upper = method.toUpperCase();
-  if (upper === 'POST') return 'velu-openapi-method-badge velu-openapi-method-post';
-  if (upper === 'PUT') return 'velu-openapi-method-badge velu-openapi-method-put';
-  if (upper === 'PATCH') return 'velu-openapi-method-badge velu-openapi-method-patch';
-  if (upper === 'DELETE') return 'velu-openapi-method-badge velu-openapi-method-delete';
-  if (upper === 'WEBHOOK') return 'velu-openapi-method-badge velu-openapi-method-webhook';
-  return 'velu-openapi-method-badge velu-openapi-method-get';
-}
-
-function parseOperationReference(value: string, requireUppercaseMethod = false): { method: string; target: string } | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const withSpec = trimmed.match(/^(\S+)\s+([A-Za-z]+)\s+(.+)$/);
-  if (withSpec) {
-    const rawMethod = withSpec[2];
-    const method = withSpec[2].toUpperCase();
-    if (requireUppercaseMethod && rawMethod !== method) return null;
-    if (!OPENAPI_METHODS.has(method)) return null;
-    return { method, target: withSpec[3].trim() };
-  }
-  const noSpec = trimmed.match(/^([A-Za-z]+)\s+(.+)$/);
-  if (noSpec) {
-    const rawMethod = noSpec[1];
-    const method = noSpec[1].toUpperCase();
-    if (requireUppercaseMethod && rawMethod !== method) return null;
-    if (!OPENAPI_METHODS.has(method)) return null;
-    return { method, target: noSpec[2].trim() };
-  }
-  return null;
-}
-
-function stripMethodPrefix(name: string, method: string): string {
-  const regex = new RegExp(`^${method}\\s+`, 'i');
-  return name.replace(regex, '').trim();
-}
-
-function openApiSidebarMethodBadgePlugin() {
-  return {
-    name: 'velu:openapi-sidebar-method-badge',
-    transformPageTree: {
-      file(node: Record<string, unknown>, filePath?: string) {
-        let data: Record<string, unknown> = {};
-        if (filePath) {
-          const file = (this as { storage?: { read?: (path: string) => unknown } }).storage?.read?.(filePath) as
-            | { format?: string; data?: Record<string, unknown> }
-            | undefined;
-          if (file?.format === 'page') data = file.data ?? {};
-        }
-
-        const nameCandidate = typeof node.name === 'string' ? node.name.trim() : '';
-        const titleCandidate = typeof data.title === 'string' ? data.title.trim() : '';
-        const openApiCandidate = typeof data.openapi === 'string' ? data.openapi.trim() : '';
-        const parsed = openApiCandidate
-          ? parseOperationReference(openApiCandidate)
-          : parseOperationReference(nameCandidate, true) ?? parseOperationReference(titleCandidate, true);
-        if (!parsed) return node;
-
-        const method = parsed.method;
-        const rawName = nameCandidate || titleCandidate || parsed.target;
-        const text = stripMethodPrefix(rawName, method) || parsed.target || rawName || method;
-        const stableIdRaw = filePath || openApiCandidate || rawName || `${method}-${parsed.target}`;
-        const stableId = stableIdRaw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-
-        node.name = createElement(
-          'span',
-          { className: 'velu-openapi-sidebar-item', key: `openapi-item-${stableId || 'unknown'}` },
-          createElement(
-            'span',
-            { className: methodBadgeClass(method), key: `openapi-item-${stableId || 'unknown'}-method` },
-            method,
-          ),
-          createElement(
-            'span',
-            { className: 'velu-openapi-sidebar-label', key: `openapi-item-${stableId || 'unknown'}-label` },
-            text,
-          ),
-        );
-        return node;
-      },
-    },
-  };
 }
 
 export const source = loader({
@@ -102,16 +16,7 @@ export const source = loader({
   source: docsCollection.toFumadocsSource() as any,
   plugins: [
     openApiSidebarMethodBadgePlugin() as any,
-    statusBadgesPlugin({
-      renderBadge: (status: string) => {
-        const normalized = status.trim().toLowerCase();
-        const label = normalized === 'deprecated' ? 'Deprecated' : status;
-        const className = normalized === 'deprecated'
-          ? 'velu-status-badge velu-status-badge-deprecated'
-          : 'velu-status-badge';
-        return createElement('span', { className, 'data-status': normalized }, label);
-      },
-    }),
+    createStatusBadgesPlugin(),
   ],
   i18n:
     languages.length > 1
@@ -124,3 +29,81 @@ export const source = loader({
         }
       : undefined,
 });
+
+/**
+ * Get the page tree filtered to a specific session's content.
+ * The content directory has files at {sessionId}/{slug}.mdx,
+ * so the page tree has top-level folders per session.
+ */
+export function getSessionPageTree(sessionId: string) {
+  const fullTree = source.getPageTree();
+  const children = Array.isArray(fullTree.children) ? fullTree.children : [];
+
+  // Find the root folder matching this session ID
+  const sessionFolder = children.find((child: any) => {
+    if (child?.type !== 'folder') return false;
+    const urls = collectUrls(child);
+    for (const url of urls) {
+      const firstSegment = url.replace(/^\/+/, '').split('/')[0];
+      if (firstSegment === sessionId) return true;
+    }
+    return false;
+  }) as any;
+
+  if (sessionFolder && Array.isArray(sessionFolder.children)) {
+    // Mark first-level folders as root (fumadocs sets root:true on top-level folders,
+    // but after extracting session children they lose that flag)
+    const children = sessionFolder.children.map((child: any) => {
+      if (child?.type === 'folder') return { ...child, root: true };
+      return child;
+    });
+    return stripUrlPrefix({ ...fullTree, children }, sessionId);
+  }
+
+  // Fallback: filter children by URL prefix
+  const filtered = children.filter((child: any) => {
+    const urls = collectUrls(child);
+    return urls.some((url: string) => {
+      const segments = url.replace(/^\/+/, '').split('/');
+      return segments[0] === sessionId;
+    });
+  });
+
+  return stripUrlPrefix({ ...fullTree, children: filtered }, sessionId);
+}
+
+/**
+ * Recursively strip the session prefix from all URLs in the tree
+ * so that /mint-test/platform/... becomes /platform/...
+ */
+function stripUrlPrefix(tree: any, sessionId: string): any {
+  const prefix = `/${sessionId}`;
+  function stripUrl(url: string): string {
+    if (url === prefix || url === `${prefix}/`) return '/';
+    if (url.startsWith(`${prefix}/`)) return url.slice(prefix.length);
+    return url;
+  }
+  function walk(node: any): any {
+    if (!node || typeof node !== 'object') return node;
+    const copy = { ...node };
+    if (typeof copy.url === 'string') copy.url = stripUrl(copy.url);
+    if (copy.index && typeof copy.index.url === 'string') {
+      copy.index = { ...copy.index, url: stripUrl(copy.index.url) };
+    }
+    if (Array.isArray(copy.children)) {
+      copy.children = copy.children.map(walk);
+    }
+    return copy;
+  }
+  return walk(tree);
+}
+
+function collectUrls(node: any, out: string[] = []): string[] {
+  if (!node || typeof node !== 'object') return out;
+  if (typeof node.url === 'string') out.push(node.url);
+  if (node.index && typeof node.index.url === 'string') out.push(node.index.url);
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) collectUrls(child, out);
+  }
+  return out;
+}
