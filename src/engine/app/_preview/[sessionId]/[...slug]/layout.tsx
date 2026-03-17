@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { createElement, type ReactNode } from 'react';
 import { loadSessionConfigSource } from '@/lib/preview-config';
 import {
@@ -13,7 +15,7 @@ import {
   getSiteLogoAsset,
 } from '@/lib/velu';
 import { baseOptions } from '@/lib/layout.shared';
-import { getSessionPageTree } from '@/lib/source';
+import { getSessionPageTree } from '@/lib/preview-source';
 import { renderDocsLayout } from '@/lib/docs-layout';
 
 interface LayoutProps {
@@ -74,7 +76,7 @@ export default async function SessionDocsLayout({ children, params }: LayoutProp
   };
 
   const languages = getLanguages(src);
-  const tree = getSessionPageTree(sessionId);
+  const tree = await getSessionPageTree(sessionId);
 
   return renderDocsLayout(
     {

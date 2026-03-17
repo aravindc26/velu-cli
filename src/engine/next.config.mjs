@@ -8,13 +8,13 @@ const withMDX = createMDX({
 /** @type {import('next').NextConfig} */
 const config = {
   reactStrictMode: false,
-  output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
+  output: process.env.PREVIEW_MODE ? undefined : (process.env.NODE_ENV === 'production' ? 'export' : undefined),
   basePath: process.env.VELU_BASE_PATH || '',
   // For static hosts without rewrite rules, emit directory routes
   // (e.g. /docs/page/index.html) so extensionless URLs resolve.
   trailingSlash: true,
   skipTrailingSlashRedirect: true,
-  distDir: 'dist',
+  distDir: process.env.PREVIEW_MODE ? '.next' : 'dist',
   devIndicators: false,
   turbopack: {
     root: resolve('..'),

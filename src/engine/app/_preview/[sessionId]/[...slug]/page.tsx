@@ -1,4 +1,5 @@
 import { createElement } from 'react';
+import { readFileSync } from 'node:fs';
 import { notFound } from 'next/navigation';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
 import {
@@ -7,14 +8,13 @@ import {
   DocsPage,
   DocsTitle,
 } from 'fumadocs-ui/layouts/notebook/page';
-import { source } from '@/lib/source';
+import { getSessionSource } from '@/lib/preview-source';
 import { getMDXComponents } from '@/mdx-components';
 import { loadSessionConfigSource } from '@/lib/preview-config';
 import {
   getApiConfig,
   getContextualOptions,
   getFooterSocials,
-  getIconLibrary,
 } from '@/lib/velu';
 import { CopyPageButton } from '@/components/copy-page';
 import { VeluImageZoomFallback } from '@/components/image-zoom-fallback';
@@ -22,6 +22,9 @@ import { VeluOpenAPI } from '@/components/openapi';
 import { OpenApiTocSync } from '@/components/openapi-toc-sync';
 import { TocExamples } from '@/components/toc-examples';
 import { VeluIcon } from '@/components/icon';
+
+// Disable Next.js route caching — content changes on every sync
+export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{ sessionId: string; slug: string[] }>;
@@ -138,24 +141,43 @@ function prefixMdxComponentLinks(
 export default async function PreviewPage({ params }: PageProps) {
   const { sessionId, slug } = await params;
 
-  // The full slug for fumadocs lookup includes the session ID prefix
-  const fullSlug = [sessionId, ...slug];
-  const page = source.getPage(fullSlug);
+  const src = await getSessionSource(sessionId);
+  const page = src.getPage(slug);
 
   if (!page) notFound();
 
   const pageDataRecord = page.data as unknown as Record<string, unknown>;
-  const MDX = pageDataRecord.body as any;
+
+  // Dynamic mode: call load() to trigger on-demand MDX compilation
+  const loadFn = pageDataRecord.load as (() => Promise<{ body: any; toc: any }>) | undefined;
+  let MDX: any;
+  let pageToc: any;
+
+  if (typeof loadFn === 'function') {
+    const loaded = await loadFn();
+    MDX = loaded.body;
+    pageToc = loaded.toc;
+  } else {
+    // Fallback: pre-compiled entry (shouldn't happen in preview mode, but safe)
+    MDX = pageDataRecord.body as any;
+    pageToc = pageDataRecord.toc as any;
+  }
+
   if (typeof MDX !== 'function') notFound();
 
   const configSource = loadSessionConfigSource(sessionId);
-  const iconLibrary = configSource ? getIconLibrary(configSource) : 'fontawesome';
   const footerSocials = configSource ? getFooterSocials(configSource) : [];
   const apiConfig = getApiConfig(configSource ?? undefined);
 
-  const effectiveMarkdown = typeof pageDataRecord.processedMarkdown === 'string'
-    ? String(pageDataRecord.processedMarkdown)
-    : undefined;
+  // Read raw markdown for pattern detection (processedMarkdown not available in dynamic mode)
+  const pageInfo = pageDataRecord.info as { fullPath?: string } | undefined;
+  let effectiveMarkdown: string | undefined;
+  if (pageInfo?.fullPath) {
+    try {
+      effectiveMarkdown = readFileSync(pageInfo.fullPath, 'utf-8');
+    } catch { /* file may not exist */ }
+  }
+
   const hasPanelExamples = typeof effectiveMarkdown === 'string'
     && /<(?:Panel|RequestExample|ResponseExample)(?:\s|>)/.test(effectiveMarkdown);
 
@@ -172,7 +194,6 @@ export default async function PreviewPage({ params }: PageProps) {
   const proxyUrl = apiConfig.playgroundProxyEnabled ? '/api/proxy' : '';
   const isDeprecatedPage = (pageDataRecord.deprecated === true)
     || String((pageDataRecord.status ?? '')).trim().toLowerCase() === 'deprecated';
-  const pageToc = pageDataRecord.toc as any;
   const pageFull = typeof pageDataRecord.full === 'boolean' ? pageDataRecord.full : undefined;
   const hasApiTocRail = shouldShowOpenApi || hasPanelExamples;
   const tableOfContentHeader = hasApiTocRail
@@ -181,14 +202,14 @@ export default async function PreviewPage({ params }: PageProps) {
 
   // Prev/next navigation
   const sessionPrefix = `/${sessionId}`;
-  const allPages = source.getPages();
-  const orderedSessionPages = allPages.filter((p) => p.url.startsWith(`${sessionPrefix}/`));
+  const allPages = src.getPages();
+  const orderedSessionPages = allPages;
   const sourcePageUrl = (page as unknown as { url?: string }).url;
-  const fallbackPath = `/${fullSlug.join('/')}`.replace(/\/{2,}/g, '/');
+  const fallbackPath = `/${slug.join('/')}`.replace(/\/{2,}/g, '/');
   const pageUrl = (typeof sourcePageUrl === 'string' && sourcePageUrl.trim())
     ? sourcePageUrl
     : (fallbackPath === '' ? '/' : fallbackPath);
-  const currentIndex = orderedSessionPages.findIndex((entry) => entry.url === pageUrl);
+  const currentIndex = orderedSessionPages.findIndex((entry: any) => entry.url === pageUrl);
   const previousPage = currentIndex > 0 ? orderedSessionPages[currentIndex - 1] : undefined;
   const nextPage = currentIndex >= 0 && currentIndex < orderedSessionPages.length - 1 ? orderedSessionPages[currentIndex + 1] : undefined;
 
@@ -232,7 +253,7 @@ export default async function PreviewPage({ params }: PageProps) {
         <MDX
           components={prefixMdxComponentLinks(
             getMDXComponents({
-              a: createRelativeLink(source, page),
+              a: createRelativeLink(src as any, page),
             }, configSource ?? undefined),
             sessionPrefix,
           )}

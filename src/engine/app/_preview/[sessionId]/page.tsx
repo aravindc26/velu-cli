@@ -1,5 +1,7 @@
+export const dynamic = 'force-dynamic';
+
 import { redirect } from 'next/navigation';
-import { getSessionPageTree } from '@/lib/source';
+import { getSessionPageTree } from '@/lib/preview-source';
 
 interface PageProps {
   params: Promise<{ sessionId: string }>;
@@ -23,7 +25,7 @@ function findFirstPageUrl(node: any): string | undefined {
 
 export default async function SessionIndexPage({ params }: PageProps) {
   const { sessionId } = await params;
-  const tree = getSessionPageTree(sessionId);
+  const tree = await getSessionPageTree(sessionId);
   const firstUrl = findFirstPageUrl(tree);
 
   if (firstUrl) {

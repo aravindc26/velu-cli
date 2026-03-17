@@ -1,6 +1,6 @@
 {
   "name": "@aravindc26/velu",
-  "version": "0.12.13",
+  "version": "0.13.6",
   "description": "A modern documentation site generator powered by Markdown and JSON configuration",
   "type": "module",
   "license": "MIT",
@@ -28,7 +28,8 @@
     "dev": "tsx src/cli.ts run"
   },
   "dependencies": {
-    "@tailwindcss/postcss": "^4.1.18",
+    "@fumadocs/mdx-remote": "^1.4.6",
+    "@tailwindcss/postcss": "~4.1.18",
     "@types/mdx": "^2.0.13",
     "@types/node": "^22.0.0",
     "@types/react": "^19.2.13",
@@ -46,7 +47,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "shiki": "^3.22.0",
-    "tailwindcss": "^4.1.18",
+    "tailwindcss": "~4.1.18",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3",
     "yaml": "^2.8.2"

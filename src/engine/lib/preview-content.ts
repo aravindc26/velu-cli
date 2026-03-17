@@ -504,6 +504,64 @@ function buildArtifacts(config: VeluConfig, docsDir?: string): BuildArtifacts {
   return { pageMap, metaFiles, firstPage };
 }
 
+// ── Image path rewriting ────────────────────────────────────────────────────
+
+/**
+ * Rewrite image references to use the session assets API.
+ * Handles markdown images, HTML/JSX img tags, and various path formats.
+ * Skips external URLs (http://, https://).
+ */
+function rewriteImagePaths(
+  content: string,
+  sessionId: string,
+  srcFilePath: string,
+): string {
+  const fileDir = dirname(srcFilePath);
+  const workspaceDir = join(WORKSPACE_DIR, sessionId);
+
+  function resolveAssetPath(rawPath: string): string {
+    const trimmed = rawPath.trim();
+    // Skip external URLs
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    // Skip data URIs
+    if (trimmed.startsWith('data:')) return trimmed;
+    // Skip already-rewritten paths
+    if (trimmed.includes(`/api/sessions/${sessionId}/assets/`)) return trimmed;
+
+    let resolved: string;
+    if (trimmed.startsWith('/')) {
+      // Absolute path relative to workspace root
+      resolved = trimmed.replace(/^\/+/, '');
+    } else {
+      // Relative path — resolve relative to source file's directory
+      const abs = resolve(fileDir, trimmed);
+      resolved = relative(workspaceDir, abs).replace(/\\/g, '/');
+    }
+
+    return `/api/sessions/${sessionId}/assets/${resolved}`;
+  }
+
+  // Markdown images: ![alt](path)
+  content = content.replace(
+    /!\[([^\]]*)\]\(([^)]+)\)/g,
+    (match, alt, path) => {
+      const rewritten = resolveAssetPath(path);
+      return `![${alt}](${rewritten})`;
+    },
+  );
+
+  // HTML/JSX img src: <img src="path"> or src={...}
+  content = content.replace(
+    /(<img\b[^>]*?\bsrc\s*=\s*)(["'])([^"']+)\2/gi,
+    (match, prefix, quote, path) => {
+      const rewritten = resolveAssetPath(path);
+      return `${prefix}${quote}${rewritten}${quote}`;
+    },
+  );
+
+  return content;
+}
+
 // ── Page processing ────────────────────────────────────────────────────────
 
 function processPage(
@@ -511,9 +569,15 @@ function processPage(
   destPath: string,
   slug: string,
   variables: Record<string, string>,
+  sessionId?: string,
 ): void {
   let content = readFileSync(srcPath, 'utf-8');
   content = replaceVariablesInString(content, variables);
+
+  // Rewrite image paths to use the assets API
+  if (sessionId) {
+    content = rewriteImagePaths(content, sessionId, srcPath);
+  }
 
   if (!content.startsWith('---')) {
     const titleMatch = content.match(/^#\s+(.+)$/m);
@@ -538,6 +602,7 @@ function writeLangContent(
   variables: Record<string, string>,
   isDefault: boolean,
   useLangFolders = false,
+  sessionId?: string,
 ) {
   const storagePrefix = useLangFolders ? langCode : (isDefault ? '' : langCode);
 
@@ -588,7 +653,7 @@ function writeLangContent(
     }
     if (!existsSync(srcPath)) continue;
 
-    processPage(srcPath, destPath, src, variables);
+    processPage(srcPath, destPath, src, variables, sessionId);
   }
 
   const indexPath = storagePrefix
@@ -638,7 +703,7 @@ export function generateSessionContent(sessionId: string): {
         navigation: { ...config.navigation, tabs: langEntry.tabs },
       } as VeluConfig;
       const artifacts = buildArtifacts(langConfig, workspaceDir);
-      writeLangContent(workspaceDir, outputDir, langEntry.language, artifacts, variables, isDefault, true);
+      writeLangContent(workspaceDir, outputDir, langEntry.language, artifacts, variables, isDefault, true, sessionId);
       totalPages += artifacts.pageMap.length;
       if (i === 0) firstPage = artifacts.firstPage;
       rootPages.push(`!${langEntry.language}`);
@@ -658,7 +723,7 @@ export function generateSessionContent(sessionId: string): {
   writeLangContent(
     workspaceDir, outputDir,
     simpleLanguages[0] || 'en', artifacts, variables,
-    true, useLangFolders,
+    true, useLangFolders, sessionId,
   );
 
   let totalPages = artifacts.pageMap.length;
@@ -666,7 +731,7 @@ export function generateSessionContent(sessionId: string): {
   if (simpleLanguages.length > 1) {
     const rootPages = [`!${simpleLanguages[0] || 'en'}`];
     for (const lang of simpleLanguages.slice(1)) {
-      writeLangContent(workspaceDir, outputDir, lang, artifacts, variables, false, true);
+      writeLangContent(workspaceDir, outputDir, lang, artifacts, variables, false, true, sessionId);
       rootPages.push(`!${lang}`);
       totalPages += artifacts.pageMap.length;
     }
@@ -689,6 +754,8 @@ export function syncSessionFile(
 ): { synced: boolean } {
   const workspaceDir = join(WORKSPACE_DIR, sessionId);
   const outputDir = join(PREVIEW_CONTENT_DIR, sessionId);
+
+  console.log(`[PREVIEW:syncFile] session=${sessionId} file=${filePath}`);
 
   if (filePath === PRIMARY_CONFIG_NAME || filePath === LEGACY_CONFIG_NAME) {
     generateSessionContent(sessionId);
@@ -724,7 +791,7 @@ export function syncSessionFile(
 
     if (mapping) {
       const destPath = join(outputDir, `${mapping.dest}.mdx`);
-      processPage(srcPath, destPath, stripped, variables);
+      processPage(srcPath, destPath, stripped, variables, sessionId);
       return { synced: true };
     }
   } catch {
@@ -732,7 +799,7 @@ export function syncSessionFile(
   }
 
   const destPath = join(outputDir, `${stripped}.mdx`);
-  processPage(srcPath, destPath, stripped, variables);
+  processPage(srcPath, destPath, stripped, variables, sessionId);
   return { synced: true };
 }
 

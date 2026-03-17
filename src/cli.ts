@@ -571,25 +571,37 @@ async function previewServer(port: number) {
   // Resolve the next binary from the CLI's own node_modules
   const nextBinPath = join(NODE_MODULES_PATH, "next", "dist", "bin", "next");
 
-  const child = spawn(process.execPath, [nextBinPath, "dev", "--port", String(port), "--turbopack"], {
-    cwd: runtimeDir,
-    stdio: ["inherit", "pipe", "inherit"],
-    env: {
-      ...previewServerEnv(),
-      // Align source.config.ts and content-generator on the same content dir
-      PREVIEW_CONTENT_DIR: process.env.PREVIEW_CONTENT_DIR || "./content",
-      WATCHPACK_POLLING: process.env.WATCHPACK_POLLING || "false",
-    },
-  });
+  const previewEnv = {
+    ...previewServerEnv(),
+    // Align source.config.ts and content-generator on the same content dir
+    PREVIEW_CONTENT_DIR: process.env.PREVIEW_CONTENT_DIR || "./content",
+    // Enable preview mode so next.config.mjs produces a server build (not static export)
+    PREVIEW_MODE: "true",
+  };
 
-  // Pipe stdout through while watching for the "Ready" signal to trigger warmup
-  let warmedUp = false;
-  child.stdout?.on("data", (data: Buffer) => {
-    process.stdout.write(data);
-    if (!warmedUp && data.toString().includes("Ready")) {
-      warmedUp = true;
-      warmupRoutes(port);
-    }
+  // Build the app if not already pre-built (Docker pre-builds at image time)
+  const nextOutputDir = join(runtimeDir, ".next");
+  if (!existsSync(nextOutputDir)) {
+    console.log("  Building preview app (first run)...");
+    const buildChild = spawn(process.execPath, [nextBinPath, "build"], {
+      cwd: runtimeDir,
+      stdio: "inherit",
+      env: previewEnv,
+    });
+    await new Promise<void>((res, rej) => {
+      buildChild.on("exit", (code) => {
+        if (code === 0) res();
+        else rej(new Error(`next build exited with code ${code}`));
+      });
+    });
+    console.log("  Build complete.");
+  }
+
+  // Start production server
+  const child = spawn(process.execPath, [nextBinPath, "start", "--port", String(port)], {
+    cwd: runtimeDir,
+    stdio: "inherit",
+    env: previewEnv,
   });
 
   const cleanup = () => child.kill("SIGTERM");
@@ -603,18 +615,6 @@ async function previewServer(port: number) {
       res();
     });
   });
-}
-
-/** Pre-warm key routes so Turbopack compiles them before real user requests. */
-function warmupRoutes(port: number) {
-  const routes = [
-    "/api/sessions/_warmup/init",   // compile API route
-    "/_warmup/docs/warmup",         // compile [sessionId]/[...slug] page route
-  ];
-  console.log("  Pre-warming routes...");
-  for (const route of routes) {
-    fetch(`http://localhost:${port}${route}`).catch(() => {});
-  }
 }
 
 // ── run ──────────────────────────────────────────────────────────────────────────
