@@ -2,7 +2,7 @@
  * Shared docs layout rendering logic.
  * Used by both (docs)/[...slug]/layout.tsx (production) and _preview/ routes.
  */
-import { isValidElement, type ReactNode } from 'react';
+import React, { isValidElement, type ReactNode } from 'react';
 import { DocsLayout } from 'fumadocs-ui/layouts/notebook';
 import type { LinkItemType, BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
 import { SidebarLinks } from '@/components/sidebar-links';
@@ -477,7 +477,7 @@ export interface DocsLayoutConfig {
   urlPrefix?: string;
 }
 
-export function renderDocsLayout(config: DocsLayoutConfig, children: ReactNode): JSX.Element {
+export function renderDocsLayout(config: DocsLayoutConfig, children: ReactNode): React.JSX.Element {
   const {
     slug: slugInput,
     tree: localePageTree,

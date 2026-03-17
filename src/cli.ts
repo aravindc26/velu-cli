@@ -578,7 +578,7 @@ async function previewServer(port: number) {
       ...previewServerEnv(),
       // Align source.config.ts and content-generator on the same content dir
       PREVIEW_CONTENT_DIR: process.env.PREVIEW_CONTENT_DIR || "./content",
-      WATCHPACK_POLLING: process.env.WATCHPACK_POLLING || "true",
+      WATCHPACK_POLLING: process.env.WATCHPACK_POLLING || "false",
     },
   });
 

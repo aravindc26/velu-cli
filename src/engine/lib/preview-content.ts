@@ -110,7 +110,7 @@ interface PageMapping {
 
 interface MetaFile {
   dir: string;
-  data: { pages: string[]; title?: string; description?: string };
+  data: { pages: string[]; title?: string; description?: string; [key: string]: unknown };
 }
 
 interface BuildArtifacts {
@@ -415,7 +415,7 @@ function buildArtifacts(config: VeluConfig, docsDir?: string): BuildArtifacts {
       }
     }
 
-    const groupMetaData: Record<string, unknown> = {
+    const groupMetaData: MetaFile['data'] = {
       title: group.group,
       pages: groupMetaPages,
       defaultOpen: group.expanded !== false,
