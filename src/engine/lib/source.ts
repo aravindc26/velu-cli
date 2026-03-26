@@ -1,7 +1,7 @@
 import { loader } from 'fumadocs-core/source';
 import * as mdxCollections from 'fumadocs-mdx:collections/server';
 import { getLanguages } from '@/lib/velu';
-import { openApiSidebarMethodBadgePlugin, createStatusBadgesPlugin } from '@core/lib/source-plugins';
+import { openApiSidebarMethodBadgePlugin, createStatusBadgesPlugin } from '../engine-core/lib/source-plugins';
 
 const languages = getLanguages();
 const defaultLanguage = languages[0] ?? 'en';

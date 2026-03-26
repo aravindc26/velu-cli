@@ -1,7 +1,7 @@
 import { defineConfig, defineDocs } from 'fumadocs-mdx/config';
 import { metaSchema, pageSchema } from 'fumadocs-core/source/schema';
 import { transformerMetaHighlight } from '@shikijs/transformers';
-import { remarkCodeFilenameToTitle, sharedRehypeCodeOptions } from '@core/lib/remark-plugins';
+import { remarkCodeFilenameToTitle, remarkStripJsxFromHeadings, sharedRehypeCodeOptions } from './engine-core/lib/remark-plugins';
 import { z } from 'zod';
 
 const contentDir = process.env.PREVIEW_CONTENT_DIR || 'content/docs';
@@ -27,7 +27,7 @@ export const docs = defineDocs({
 
 export default defineConfig({
   mdxOptions: {
-    remarkPlugins: [remarkCodeFilenameToTitle],
+    remarkPlugins: [remarkStripJsxFromHeadings, remarkCodeFilenameToTitle],
     rehypeCodeOptions: ({
       ...sharedRehypeCodeOptions,
       transformers: [transformerMetaHighlight()],

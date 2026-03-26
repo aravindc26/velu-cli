@@ -14,7 +14,7 @@ import { join, relative } from 'node:path';
 import { loader } from 'fumadocs-core/source';
 import { dynamic } from 'fumadocs-mdx/runtime/dynamic';
 import type { LazyEntry } from 'fumadocs-mdx/runtime/dynamic';
-import { openApiSidebarMethodBadgePlugin, createStatusBadgesPlugin } from '@core/lib/source-plugins';
+import { openApiSidebarMethodBadgePlugin, createStatusBadgesPlugin } from '../engine-core/lib/source-plugins';
 import { getLanguages } from '@/lib/velu';
 import { loadSessionConfigSource } from '@/lib/preview-config';
 

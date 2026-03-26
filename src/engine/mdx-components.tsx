@@ -1,5 +1,5 @@
 import type { MDXComponents } from 'mdx/types';
-import { getMDXComponents as getCoreMDXComponents } from '@core/mdx-components';
+import { getMDXComponents as getCoreMDXComponents } from './engine-core/mdx-components';
 import { getApiConfig, getIconLibrary, type VeluConfigSource } from '@/lib/velu';
 
 export function getMDXComponents(components?: MDXComponents, src?: VeluConfigSource): MDXComponents {
