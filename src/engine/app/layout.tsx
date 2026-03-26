@@ -1,14 +1,14 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { getAppearance, getBannerConfig, getFontsConfig, getSeoConfig, getSiteDescription, getSiteFavicon, getSiteName, getSiteOrigin, getSitePrimaryColor } from '@/lib/velu';
+import { getAppearance, getBannerConfig, getCliVersion, getFontsConfig, getSeoConfig, getSiteDescription, getSiteFavicon, getSiteName, getSiteOrigin, getSitePrimaryColor } from '@/lib/velu';
 import { Providers } from '@/components/providers';
 import { VeluAssistant } from '@/components/assistant';
 import { VeluBanner } from '@/components/banner';
 import './global.css';
-import '@core/css/shared.css';
-import '@core/css/search.css';
-import '@core/css/assistant.css';
-import '@core/css/copy-page.css';
+import '../engine-core/css/shared.css';
+import '../engine-core/css/search.css';
+import '../engine-core/css/assistant.css';
+import '../engine-core/css/copy-page.css';
 
 function toAbsoluteUrl(origin: string, value: string): string {
   const trimmed = value.trim();
@@ -80,6 +80,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <meta name="generator" content={`velu-cli ${getCliVersion()}`} />
         <link rel="sitemap" type="application/xml" href={`${siteOrigin}/sitemap.xml`} />
         {fontsConfig && (() => {
           // Collect Google Fonts families that don't use a custom source

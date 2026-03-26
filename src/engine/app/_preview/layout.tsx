@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import { RootProvider } from 'fumadocs-ui/provider/next';
 import './global.css';
-import '@core/css/shared.css';
-import '@core/css/search.css';
-import '@core/css/copy-page.css';
+import '../../engine-core/css/shared.css';
+import '../../engine-core/css/search.css';
+import '../../engine-core/css/copy-page.css';
 
 export const metadata = {
   title: 'Preview',

@@ -1032,3 +1032,14 @@ export function getSiteOrigin(src?: VeluConfigSource): string {
 
   return 'http://localhost:4321';
 }
+
+export function getCliVersion(): string {
+  try {
+    const constPath = resolve(process.cwd(), 'public', 'const.json');
+    if (existsSync(constPath)) {
+      const parsed = JSON.parse(readFileSync(constPath, 'utf-8'));
+      if (typeof parsed.version === 'string') return parsed.version;
+    }
+  } catch {}
+  return 'unknown';
+}
