@@ -68,6 +68,7 @@ function initAssistant() {
     eventSource: EventSource | null;
     expanded: boolean;
     bootstrapped: boolean;
+    feedback: Record<string, 'up' | 'down'>;
   } = {
     conversationId: null,
     conversationToken: null,
@@ -75,6 +76,7 @@ function initAssistant() {
     eventSource: null,
     expanded: false,
     bootstrapped: false,
+    feedback: {},
   };
 
   const askBar = document.getElementById('veluAskBar')!;
@@ -93,6 +95,7 @@ function initAssistant() {
       sessionStorage.setItem('velu-conv-id', state.conversationId || '');
       sessionStorage.setItem('velu-conv-token', state.conversationToken || '');
       sessionStorage.setItem('velu-last-seq', String(state.lastSeq));
+      sessionStorage.setItem('velu-feedback', JSON.stringify(state.feedback));
     } catch {}
   }
 
@@ -117,6 +120,7 @@ function initAssistant() {
     state.conversationId = null;
     state.conversationToken = null;
     state.lastSeq = 0;
+    state.feedback = {};
     if (state.eventSource) { state.eventSource.close(); state.eventSource = null; }
     messagesEl.innerHTML = '';
     chatInput.value = '';
@@ -143,6 +147,28 @@ function initAssistant() {
       .catch(() => {});
   }
 
+  function submitFeedback(messageId: number, rating: 'up' | 'down') {
+    return fetch(API_BASE + '/messages/' + messageId + '/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ rating }),
+    }).then((r) => r.json());
+  }
+
+  function retractFeedback(messageId: number) {
+    return fetch(API_BASE + '/messages/' + messageId + '/feedback', {
+      method: 'DELETE',
+      credentials: 'include',
+    }).then((r) => r.json());
+  }
+
+  function saveFeedbackState() {
+    try {
+      sessionStorage.setItem('velu-feedback', JSON.stringify(state.feedback));
+    } catch {}
+  }
+
   function formatContent(text: string, citations: any[]) {
     let html = text
       .replace(/&/g, '&amp;')
@@ -162,9 +188,10 @@ function initAssistant() {
     return html;
   }
 
-  function addMessage(role: string, content: string, citations: any[] = []) {
+  function addMessage(role: string, content: string, citations: any[] = [], messageId?: number) {
     const msgDiv = document.createElement('div');
     msgDiv.className = 'velu-msg velu-msg-' + role;
+    if (messageId) msgDiv.setAttribute('data-message-id', String(messageId));
     const bubble = document.createElement('div');
     bubble.className = 'velu-msg-bubble velu-msg-bubble-' + role;
     bubble.innerHTML = formatContent(content, citations);
@@ -188,17 +215,121 @@ function initAssistant() {
       const actions = document.createElement('div');
       actions.className = 'velu-msg-actions';
       actions.innerHTML =
-        '<button class="velu-msg-action" title="Like"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg></button>' +
-        '<button class="velu-msg-action" title="Dislike"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg></button>' +
-        '<button class="velu-msg-action velu-msg-copy" title="Copy"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>';
+        '<button class="velu-msg-action velu-msg-like" title="Like"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg></button>' +
+        '<button class="velu-msg-action velu-msg-dislike" title="Dislike"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg></button>' +
+        '<button class="velu-msg-action velu-msg-copy" title="Copy"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>' +
+        '<button class="velu-msg-action velu-msg-regenerate" title="Regenerate"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg></button>';
       msgDiv.appendChild(actions);
 
-      const copyBtn = actions.querySelector('.velu-msg-copy');
+      // Restore feedback state if we have it for this message
+      const existingRating = messageId ? state.feedback[messageId] : null;
+      const likeBtn = actions.querySelector('.velu-msg-like') as HTMLElement;
+      const dislikeBtn = actions.querySelector('.velu-msg-dislike') as HTMLElement;
+      if (existingRating === 'up') likeBtn.classList.add('velu-msg-action-active');
+      if (existingRating === 'down') dislikeBtn.classList.add('velu-msg-action-active');
+
+      // Like button
+      if (likeBtn && dislikeBtn) {
+        likeBtn.onclick = () => {
+          if (!messageId) return;
+          const isActive = likeBtn.classList.contains('velu-msg-action-active');
+          if (isActive) {
+            // Retract
+            likeBtn.classList.remove('velu-msg-action-active');
+            delete state.feedback[messageId];
+            saveFeedbackState();
+            retractFeedback(messageId).catch(() => {});
+          } else {
+            // Submit up
+            likeBtn.classList.add('velu-msg-action-active');
+            dislikeBtn.classList.remove('velu-msg-action-active');
+            state.feedback[messageId] = 'up';
+            saveFeedbackState();
+            submitFeedback(messageId, 'up').catch(() => {});
+          }
+        };
+        dislikeBtn.onclick = () => {
+          if (!messageId) return;
+          const isActive = dislikeBtn.classList.contains('velu-msg-action-active');
+          if (isActive) {
+            // Retract
+            dislikeBtn.classList.remove('velu-msg-action-active');
+            delete state.feedback[messageId];
+            saveFeedbackState();
+            retractFeedback(messageId).catch(() => {});
+          } else {
+            // Submit down
+            dislikeBtn.classList.add('velu-msg-action-active');
+            likeBtn.classList.remove('velu-msg-action-active');
+            state.feedback[messageId] = 'down';
+            saveFeedbackState();
+            submitFeedback(messageId, 'down').catch(() => {});
+          }
+        };
+      }
+
+      // Copy button
+      const copyBtn = actions.querySelector('.velu-msg-copy') as HTMLElement;
       if (copyBtn) {
-        (copyBtn as HTMLElement).onclick = () => {
+        copyBtn.onclick = () => {
           navigator.clipboard.writeText(content);
-          (copyBtn as HTMLElement).title = 'Copied!';
-          setTimeout(() => { (copyBtn as HTMLElement).title = 'Copy'; }, 1500);
+          copyBtn.classList.add('velu-msg-action-active');
+          copyBtn.title = 'Copied!';
+          setTimeout(() => { copyBtn.classList.remove('velu-msg-action-active'); copyBtn.title = 'Copy'; }, 1500);
+        };
+      }
+
+      // Regenerate button
+      const regenBtn = actions.querySelector('.velu-msg-regenerate') as HTMLElement;
+      if (regenBtn) {
+        regenBtn.onclick = () => {
+          const allMsgs = messagesEl.querySelectorAll('.velu-msg');
+          let lastUserText = '';
+          for (let i = allMsgs.length - 1; i >= 0; i--) {
+            if (allMsgs[i].classList.contains('velu-msg-user')) {
+              const bubble = allMsgs[i].querySelector('.velu-msg-bubble');
+              if (bubble) lastUserText = bubble.textContent || '';
+              break;
+            }
+          }
+          if (lastUserText) {
+            msgDiv.remove();
+            saveState();
+            addThinking();
+            bootstrap()
+              .then(() =>
+                fetch(API_BASE + '/messages', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({
+                    message: lastUserText,
+                    conversation_id: state.conversationId,
+                  }),
+                })
+              )
+              .then((r) => {
+                if (r.status === 429) {
+                  removeThinking();
+                  addMessage('assistant', 'Rate limited. Please wait a moment and try again.');
+                  return;
+                }
+                return r.json();
+              })
+              .then((data: any) => {
+                if (!data) return;
+                if (data.conversation_id) state.conversationId = data.conversation_id;
+                if (data.conversation_token) state.conversationToken = data.conversation_token;
+                saveState();
+                if (!state.eventSource || state.eventSource.readyState === 2) {
+                  connectSSE();
+                }
+              })
+              .catch(() => {
+                removeThinking();
+                addMessage('assistant', 'Failed to connect. Please try again.');
+              });
+          }
         };
       }
     }
@@ -233,7 +364,7 @@ function initAssistant() {
         const data = JSON.parse(e.data);
         const msg = data.message || data;
         if (msg.seq) state.lastSeq = msg.seq;
-        addMessage('assistant', msg.content || '', msg.citations || []);
+        addMessage('assistant', msg.content || '', msg.citations || [], msg.id);
       } catch {}
     });
 
@@ -342,10 +473,64 @@ function initAssistant() {
     const savedConvId = sessionStorage.getItem('velu-conv-id');
     const savedConvToken = sessionStorage.getItem('velu-conv-token');
     const savedSeq = sessionStorage.getItem('velu-last-seq');
+    const savedFeedback = sessionStorage.getItem('velu-feedback');
     if (savedConvId) state.conversationId = savedConvId;
     if (savedConvToken) state.conversationToken = savedConvToken;
     if (savedSeq) state.lastSeq = parseInt(savedSeq, 10) || 0;
-    if (savedMessages) messagesEl.innerHTML = savedMessages;
+    if (savedFeedback) try { state.feedback = JSON.parse(savedFeedback); } catch {}
+    if (savedMessages) {
+      messagesEl.innerHTML = savedMessages;
+      // Re-bind action handlers on restored messages
+      messagesEl.querySelectorAll('.velu-msg-assistant').forEach((msgDiv) => {
+        const messageId = msgDiv.getAttribute('data-message-id');
+        const mid = messageId ? parseInt(messageId, 10) : null;
+        const likeBtn = msgDiv.querySelector('.velu-msg-like') as HTMLElement | null;
+        const dislikeBtn = msgDiv.querySelector('.velu-msg-dislike') as HTMLElement | null;
+        const copyBtn = msgDiv.querySelector('.velu-msg-copy') as HTMLElement | null;
+        const bubble = msgDiv.querySelector('.velu-msg-bubble') as HTMLElement | null;
+
+        if (likeBtn && dislikeBtn && mid) {
+          likeBtn.onclick = () => {
+            const isActive = likeBtn.classList.contains('velu-msg-action-active');
+            if (isActive) {
+              likeBtn.classList.remove('velu-msg-action-active');
+              delete state.feedback[mid];
+              saveFeedbackState();
+              retractFeedback(mid).catch(() => {});
+            } else {
+              likeBtn.classList.add('velu-msg-action-active');
+              dislikeBtn.classList.remove('velu-msg-action-active');
+              state.feedback[mid] = 'up';
+              saveFeedbackState();
+              submitFeedback(mid, 'up').catch(() => {});
+            }
+          };
+          dislikeBtn.onclick = () => {
+            const isActive = dislikeBtn.classList.contains('velu-msg-action-active');
+            if (isActive) {
+              dislikeBtn.classList.remove('velu-msg-action-active');
+              delete state.feedback[mid];
+              saveFeedbackState();
+              retractFeedback(mid).catch(() => {});
+            } else {
+              dislikeBtn.classList.add('velu-msg-action-active');
+              likeBtn.classList.remove('velu-msg-action-active');
+              state.feedback[mid] = 'down';
+              saveFeedbackState();
+              submitFeedback(mid, 'down').catch(() => {});
+            }
+          };
+        }
+        if (copyBtn && bubble) {
+          copyBtn.onclick = () => {
+            navigator.clipboard.writeText(bubble.textContent || '');
+            copyBtn.classList.add('velu-msg-action-active');
+            copyBtn.title = 'Copied!';
+            setTimeout(() => { copyBtn.classList.remove('velu-msg-action-active'); copyBtn.title = 'Copy'; }, 1500);
+          };
+        }
+      });
+    }
     if (savedExpanded === '1') {
       state.expanded = true;
       panel.classList.add('velu-assistant-expanded');
