@@ -233,30 +233,43 @@ function isPageString(item: unknown): item is string {
   return typeof item === "string";
 }
 
-function collectPagesFromTabs(tabs: VeluTab[]): string[] {
-  const pages: string[] = [];
+interface PageWithTab {
+  page: string;
+  tab: string | null;
+  tabSlug: string | null;
+}
 
-  function collectFromGroup(group: VeluGroup) {
+function collectPagesFromTabs(tabs: VeluTab[]): string[] {
+  return collectPagesWithTabsFromTabs(tabs).map((p) => p.page);
+}
+
+function collectPagesWithTabsFromTabs(tabs: VeluTab[]): PageWithTab[] {
+  const pages: PageWithTab[] = [];
+
+  function collectFromGroup(group: VeluGroup, tab: string | null, tabSlug: string | null) {
     for (const item of group.pages) {
       if (isPageString(item)) {
-        pages.push(item);
+        pages.push({ page: item, tab, tabSlug });
       } else if (isGroup(item)) {
-        collectFromGroup(item);
+        collectFromGroup(item, tab, tabSlug);
       }
     }
   }
 
   for (const tab of tabs) {
+    const tabName = tab.tab || null;
+    const tabSlug = tab.slug || tabName;
+
     if (tab.pages) {
       for (const item of tab.pages) {
         if (isPageString(item)) {
-          pages.push(item);
+          pages.push({ page: item, tab: tabName, tabSlug });
         }
       }
     }
     if (tab.groups) {
       for (const group of tab.groups) {
-        collectFromGroup(group);
+        collectFromGroup(group, tabName, tabSlug);
       }
     }
   }
@@ -282,6 +295,28 @@ function collectPagesByLanguage(config: VeluConfig): Record<string, string[]> {
   }
 
   const basePages = collectPagesFromTabs(config.navigation.tabs ?? []);
+  if (config.languages && config.languages.length > 0) {
+    for (const lang of config.languages) {
+      grouped[lang] = [...basePages];
+    }
+    return grouped;
+  }
+
+  grouped.en = basePages;
+  return grouped;
+}
+
+function collectPagesWithTabsByLanguage(config: VeluConfig): Record<string, PageWithTab[]> {
+  const grouped: Record<string, PageWithTab[]> = {};
+
+  if (config.navigation.languages && config.navigation.languages.length > 0) {
+    for (const lang of config.navigation.languages) {
+      grouped[lang.language] = collectPagesWithTabsFromTabs(lang.tabs);
+    }
+    return grouped;
+  }
+
+  const basePages = collectPagesWithTabsFromTabs(config.navigation.tabs ?? []);
   if (config.languages && config.languages.length > 0) {
     for (const lang of config.languages) {
       grouped[lang] = [...basePages];
@@ -362,4 +397,4 @@ function validateVeluConfig(docsDir: string, schemaPath: string): { valid: boole
   return { valid: errors.length === 0, errors };
 }
 
-export { validateVeluConfig, collectPages, collectPagesByLanguage, VeluConfig, VeluGroup, VeluTab, VeluSeparator, VeluLink, VeluAnchor };
+export { validateVeluConfig, collectPages, collectPagesByLanguage, collectPagesWithTabsByLanguage, VeluConfig, VeluGroup, VeluTab, VeluSeparator, VeluLink, VeluAnchor, type PageWithTab };

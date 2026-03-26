@@ -181,10 +181,12 @@ async function lint(docsDir: string) {
 interface PathEntry {
   path: string;
   file: string | null;
+  tab: string | null;
+  tabSlug: string | null;
 }
 
 async function paths(docsDir: string) {
-  const { collectPagesByLanguage } = await import("./validate.js");
+  const { collectPagesWithTabsByLanguage } = await import("./validate.js");
   const { normalizeConfigNavigation } = await import("./navigation-normalize.js");
   const { readFileSync, existsSync } = await import("node:fs");
   const { join } = await import("node:path");
@@ -197,23 +199,31 @@ async function paths(docsDir: string) {
 
   const raw = JSON.parse(readFileSync(configPath, "utf-8"));
   const config = normalizeConfigNavigation(raw);
-  const pagesByLanguage = collectPagesByLanguage(config);
+  const pagesByLanguage = collectPagesWithTabsByLanguage(config);
   const groupedEntries: Record<string, PathEntry[]> = {};
   const flatEntries: PathEntry[] = [];
 
   for (const [language, pages] of Object.entries(pagesByLanguage)) {
-    const entries: PathEntry[] = pages.map((pagePath) => {
+    const entries: PathEntry[] = pages.map((pageWithTab) => {
+      const pagePath = pageWithTab.page;
       // Check for .mdx first, then .md
       const mdxPath = join(docsDir, `${pagePath}.mdx`);
       const mdPath = join(docsDir, `${pagePath}.md`);
 
+      const entry: PathEntry = {
+        path: pagePath,
+        file: null,
+        tab: pageWithTab.tab,
+        tabSlug: pageWithTab.tabSlug,
+      };
+
       if (existsSync(mdxPath)) {
-        return { path: pagePath, file: `${pagePath}.mdx` };
+        entry.file = `${pagePath}.mdx`;
+      } else if (existsSync(mdPath)) {
+        entry.file = `${pagePath}.md`;
       }
-      if (existsSync(mdPath)) {
-        return { path: pagePath, file: `${pagePath}.md` };
-      }
-      return { path: pagePath, file: null };
+
+      return entry;
     });
     groupedEntries[language] = entries;
     flatEntries.push(...entries);
