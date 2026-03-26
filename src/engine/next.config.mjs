@@ -22,6 +22,10 @@ const config = {
   images: {
     unoptimized: true,
   },
+  webpack: (webpackConfig) => {
+    webpackConfig.resolve.alias['@core'] = resolve('./engine-core');
+    return webpackConfig;
+  },
 };
 
 export default withMDX(config);
