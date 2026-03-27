@@ -162,7 +162,7 @@ function normalizeSdkCodeSamples(method: MethodInformation): ReturnType<typeof c
 
 function buildCodeSampleGenerator(exampleLanguages?: string[], exampleAutogenerate = true) {
   const overrides = buildCodeSampleOverrides(exampleLanguages, exampleAutogenerate);
-  return async (method: MethodInformation) => {
+  return (method: MethodInformation) => {
     const generated: ReturnType<typeof createCodeSample>[] = [
       ...normalizeSdkCodeSamples(method),
     ];
