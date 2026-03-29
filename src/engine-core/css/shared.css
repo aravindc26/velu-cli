@@ -545,6 +545,12 @@ nextjs-portal {
 /* Ensure sidebar footer is visible — fumadocs hides the wrapper with .hidden */
 :has(> .velu-sidebar-footer-shell) {
   display: flex !important;
+  flex-direction: column;
+  padding: 0.5rem;
+  border-top: 1px solid var(--color-fd-border, #27272a);
+  position: sticky;
+  bottom: 0;
+  background: var(--color-fd-background, inherit);
 }
 
 .velu-theme-toggle {
