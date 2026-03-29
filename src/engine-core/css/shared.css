@@ -542,6 +542,11 @@ nextjs-portal {
   color: #c4b5fd;
 }
 
+/* Ensure sidebar footer is visible — fumadocs hides the wrapper with .hidden */
+:has(> .velu-sidebar-footer-shell) {
+  display: flex !important;
+}
+
 .velu-theme-toggle {
   display: flex;
   align-items: center;
@@ -1006,6 +1011,11 @@ nextjs-portal {
 
 .velu-card-group > [data-card] {
   margin: 0 !important;
+}
+
+/* Add spacing between consecutive card groups (Mintlify compat) */
+.velu-card-group + .velu-card-group {
+  margin-top: 0.75rem;
 }
 
 .velu-card-image {
