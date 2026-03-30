@@ -585,15 +585,19 @@ export function renderDocsLayout(config: DocsLayoutConfig, children: ReactNode):
             </div>
           )
           : undefined,
-        footer: (
-          <div className="velu-sidebar-footer-shell">
+        footer: ({ className, children: footerChildren, ...props }: any) => (
+          <div
+            className={['velu-sidebar-footer-shell', className].filter(Boolean).join(' ')}
+            {...props}
+          >
+            {footerChildren ? <div className="velu-sidebar-footer-icons">{footerChildren}</div> : null}
             <SidebarLinks anchors={globalAnchors} iconLibrary={iconLibrary} languages={languages} />
           </div>
         ),
       }}
       {...base}
       links={headerTabLinks.length > 0 ? headerTabLinks : base.links}
-      themeSwitch={{ enabled: true }}
+      themeSwitch={{ enabled: false }}
     >
       {children}
     </DocsLayout>
