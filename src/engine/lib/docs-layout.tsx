@@ -593,7 +593,7 @@ export function renderDocsLayout(config: DocsLayoutConfig, children: ReactNode):
       }}
       {...base}
       links={headerTabLinks.length > 0 ? headerTabLinks : base.links}
-      themeSwitch={{ enabled: false }}
+      themeSwitch={{ enabled: true }}
     >
       {children}
     </DocsLayout>
