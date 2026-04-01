@@ -2,11 +2,8 @@ import { createOpenAPI } from 'fumadocs-openapi/server';
 
 const proxy = createOpenAPI().createProxy({
   filterRequest(request) {
-    const target = new URL(request.url).searchParams.get('url');
-    if (!target) return false;
-
     try {
-      const parsed = new URL(target);
+      const parsed = new URL(request.url);
       return parsed.protocol === 'http:' || parsed.protocol === 'https:';
     } catch {
       return false;
